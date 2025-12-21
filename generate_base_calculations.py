@@ -8,6 +8,7 @@ This script processes unified options data and calculates various exposure metri
 - Theta Exposure
 - IV x OI
 - Position Metrics
+- Rankings (based on absolute values of key metrics)
 
 One output file is generated per Symbol/Date pair.
 """
@@ -97,6 +98,32 @@ def calculate_exposures(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def add_rankings(df: pd.DataFrame) -> pd.DataFrame:
+    """Add ranking columns based on absolute values of key metrics.
+
+    Rankings are in descending order (1 = highest absolute value).
+
+    Args:
+        df: DataFrame with calculated exposure metrics
+
+    Returns:
+        DataFrame with added ranking columns
+    """
+    result = df.copy()
+
+    # Rank by absolute values, descending (1 = highest absolute value)
+    # method='min' gives the same rank to ties (e.g., 1, 2, 2, 4)
+    # ascending=False means highest values get lowest rank numbers
+    result['Net_GEX_Rank'] = result['Net_GEX'].abs().rank(method='min', ascending=False)
+    result['Net_DEX_Rank'] = result['Net_DEX'].abs().rank(method='min', ascending=False)
+    result['Net_VEX_Rank'] = result['Net_VEX'].abs().rank(method='min', ascending=False)
+    result['Net_Theta_Rank'] = result['Net_Theta_Exp'].abs().rank(method='min', ascending=False)
+    result['IVxOI_Rank'] = result['IVxOI'].abs().rank(method='min', ascending=False)
+    result['OI_Imbalance_Rank'] = result['OI_Imbalance'].abs().rank(method='min', ascending=False)
+
+    return result
+
+
 def normalize_decimals(df: pd.DataFrame, decimal_places: int = 3) -> pd.DataFrame:
     """Normalize numeric columns to a fixed number of decimal places.
 
@@ -152,6 +179,9 @@ def process_unified_files() -> list[Path]:
 
             # Calculate exposures
             result_df = calculate_exposures(df)
+
+            # Add rankings
+            result_df = add_rankings(result_df)
 
             # Normalize decimals
             result_df = normalize_decimals(result_df, decimal_places=3)
