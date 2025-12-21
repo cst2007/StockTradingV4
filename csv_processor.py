@@ -1,3 +1,14 @@
+"""
+Stock Options Data Processor
+
+This module processes and merges stock options CSV data from two sources:
+1. Options side-by-side files (calls and puts with volume/OI/IV)
+2. Volatility Greeks files (calls and puts with delta/gamma/theta)
+
+The processor discovers matching file pairs, validates their structure,
+merges them on strike price, and outputs unified CSV files for analysis.
+"""
+
 import csv
 import logging
 import re
@@ -133,6 +144,13 @@ LOGGER = logging.getLogger("csv_processor")
 
 @dataclass(frozen=True)
 class FileSetKey:
+    """Unique identifier for a set of related options data files.
+
+    Attributes:
+        ticker: Stock symbol (e.g., '$SPX', 'SPXL')
+        expiry: Option expiration date in YYYY-MM-DD format
+        run_date: Data collection date in MM-DD-YYYY format
+    """
     ticker: str
     expiry: str
     run_date: str
@@ -140,6 +158,13 @@ class FileSetKey:
 
 @dataclass
 class FilePair:
+    """Container for matched side-by-side and Greeks file paths.
+
+    Attributes:
+        key: Unique identifier for this file pair
+        side_path: Path to the options side-by-side CSV file
+        greeks_path: Path to the volatility Greeks CSV file
+    """
     key: FileSetKey
     side_path: Path
     greeks_path: Path
@@ -147,17 +172,40 @@ class FilePair:
 
 @dataclass
 class DiscoveryEntry:
+    """Temporary storage during file discovery phase.
+
+    Attributes:
+        side_path: Path to side-by-side file (if found)
+        greeks_path: Path to Greeks file (if found)
+    """
     side_path: Path | None = None
     greeks_path: Path | None = None
 
 
 @dataclass
 class ProcessingResult:
+    """Result of successfully processing and merging a file pair.
+
+    Attributes:
+        dataframe: Merged and cleaned data
+        pair: The file pair that was processed
+    """
     dataframe: pd.DataFrame
     pair: FilePair
 
 
 def normalize_ticker(raw_ticker: str) -> str:
+    """Normalize ticker symbol to standard format.
+
+    Converts ticker to uppercase and applies special handling for SPX
+    to ensure consistency across different file naming conventions.
+
+    Args:
+        raw_ticker: Raw ticker string from filename
+
+    Returns:
+        Normalized ticker symbol (e.g., '$SPX', 'SPXL')
+    """
     cleaned = raw_ticker.strip()
     if cleaned.upper().replace("$", "") == "SPX":
         return "$SPX"
@@ -165,17 +213,41 @@ def normalize_ticker(raw_ticker: str) -> str:
 
 
 def parse_run_date(raw_date: str) -> str:
+    """Convert run date from MM-DD-YYYY to YYYY-MM-DD format.
+
+    Args:
+        raw_date: Date string in MM-DD-YYYY format
+
+    Returns:
+        Date string in YYYY-MM-DD format
+    """
     parsed = datetime.strptime(raw_date, "%m-%d-%Y")
     return parsed.strftime("%Y-%m-%d")
 
 
 def read_header(file_path: Path) -> list[str]:
+    """Read the header row from a CSV file.
+
+    Args:
+        file_path: Path to CSV file
+
+    Returns:
+        List of header column names
+    """
     with file_path.open(newline="", encoding="utf-8") as handle:
         reader = csv.reader(handle)
         return next(reader, [])
 
 
 def normalize_headers(headers: list[str]) -> list[str]:
+    """Normalize header strings for case-insensitive comparison.
+
+    Args:
+        headers: List of header strings
+
+    Returns:
+        List of normalized headers (stripped and lowercased)
+    """
     return [header.strip().lower() for header in headers]
 
 
@@ -185,6 +257,17 @@ def validate_headers(
     expected_columns: int,
     strike_index: int,
 ) -> bool:
+    """Validate CSV file has expected structure and headers.
+
+    Args:
+        file_path: Path to CSV file to validate
+        expected_headers: List of expected header names
+        expected_columns: Expected number of columns
+        strike_index: Index where 'Strike' column should be located
+
+    Returns:
+        True if file is valid, False otherwise
+    """
     try:
         headers = read_header(file_path)
     except Exception as exc:
@@ -219,6 +302,20 @@ def parse_numeric_series(
     field_name: str,
     drop_invalid: bool = False,
 ) -> pd.Series:
+    """Parse and clean numeric data from CSV column.
+
+    Removes commas from numbers and converts to numeric type.
+    Logs warnings for invalid values that couldn't be converted.
+
+    Args:
+        series: Pandas series to parse
+        file_path: Path to source file (for logging)
+        field_name: Name of field (for logging)
+        drop_invalid: Whether to drop invalid rows (not currently used)
+
+    Returns:
+        Cleaned numeric series with NaN for invalid values
+    """
     cleaned = series.astype(str).str.replace(",", "", regex=False).str.strip()
     numeric = pd.to_numeric(cleaned, errors="coerce")
     invalid_mask = numeric.isna() & cleaned.ne("")
@@ -236,6 +333,19 @@ def parse_numeric_series(
 
 
 def parse_percent_series(series: pd.Series, file_path: Path, field_name: str) -> pd.Series:
+    """Parse percentage values and convert to decimal.
+
+    Removes '%' symbols and converts to decimal representation
+    (e.g., '50%' becomes 0.50). Logs warnings for invalid values.
+
+    Args:
+        series: Pandas series containing percentage strings
+        file_path: Path to source file (for logging)
+        field_name: Name of field (for logging)
+
+    Returns:
+        Numeric series with decimal values (NaN for invalid values)
+    """
     cleaned = series.astype(str).str.replace("%", "", regex=False).str.strip()
     numeric = pd.to_numeric(cleaned, errors="coerce")
     invalid_mask = numeric.isna() & cleaned.ne("")
@@ -251,6 +361,18 @@ def parse_percent_series(series: pd.Series, file_path: Path, field_name: str) ->
 
 
 def discover_pairs(input_dir: Path) -> list[FilePair]:
+    """Discover and match options file pairs in input directory.
+
+    Scans for CSV files matching the expected naming patterns and
+    groups them by ticker, expiry, and run date. Handles duplicates
+    by selecting the most recently modified file.
+
+    Args:
+        input_dir: Directory containing CSV files
+
+    Returns:
+        List of complete file pairs ready for processing
+    """
     entries: dict[FileSetKey, DiscoveryEntry] = {}
     total_files = 0
 
@@ -303,6 +425,16 @@ def discover_pairs(input_dir: Path) -> list[FilePair]:
 
 
 def choose_newest(current_path: Path, new_path: Path, key: FileSetKey) -> Path:
+    """Select the most recently modified file when duplicates exist.
+
+    Args:
+        current_path: Currently selected file path
+        new_path: Newly discovered file path
+        key: File set identifier (for logging)
+
+    Returns:
+        Path to the most recently modified file
+    """
     current_mtime = current_path.stat().st_mtime
     new_mtime = new_path.stat().st_mtime
     if new_mtime > current_mtime:
@@ -325,12 +457,31 @@ def choose_newest(current_path: Path, new_path: Path, key: FileSetKey) -> Path:
 
 
 def validate_pair(pair: FilePair) -> bool:
+    """Validate both files in a pair have correct structure.
+
+    Args:
+        pair: File pair to validate
+
+    Returns:
+        True if both files are valid, False otherwise
+    """
     side_ok = validate_headers(pair.side_path, EXPECTED_SIDE_HEADERS, 19, 9)
     greeks_ok = validate_headers(pair.greeks_path, EXPECTED_GREEKS_HEADERS, 17, 8)
     return side_ok and greeks_ok
 
 
 def load_side_df(side_path: Path) -> pd.DataFrame:
+    """Load and parse options side-by-side CSV file.
+
+    Reads call and put option data including volume, open interest,
+    and implied volatility. Cleans numeric values and percentages.
+
+    Args:
+        side_path: Path to side-by-side CSV file
+
+    Returns:
+        DataFrame with parsed side-by-side data
+    """
     data = pd.read_csv(side_path, header=0, names=NAMES_SIDE, dtype=str)
     data["Strike"] = parse_numeric_series(data["Strike"], side_path, "Strike", drop_invalid=True)
     data["call_volume"] = parse_numeric_series(data["call_volume"], side_path, "call_volume")
@@ -358,6 +509,17 @@ def load_side_df(side_path: Path) -> pd.DataFrame:
 
 
 def load_greeks_df(greeks_path: Path) -> pd.DataFrame:
+    """Load and parse volatility Greeks CSV file.
+
+    Reads call and put Greeks data including delta, gamma, theta,
+    and implied volatility. Cleans numeric values and percentages.
+
+    Args:
+        greeks_path: Path to Greeks CSV file
+
+    Returns:
+        DataFrame with parsed Greeks data
+    """
     data = pd.read_csv(greeks_path, header=0, names=NAMES_GREEKS, dtype=str)
     data["Strike"] = parse_numeric_series(data["Strike"], greeks_path, "Strike", drop_invalid=True)
     data["call_iv"] = parse_percent_series(data["call_iv"], greeks_path, "call_iv")
@@ -385,6 +547,17 @@ def load_greeks_df(greeks_path: Path) -> pd.DataFrame:
 
 
 def merge_pair(pair: FilePair) -> ProcessingResult | None:
+    """Merge side-by-side and Greeks data for a file pair.
+
+    Loads both files, merges them on strike price, combines IV data
+    from both sources, and adds metadata columns.
+
+    Args:
+        pair: File pair to merge
+
+    Returns:
+        ProcessingResult if successful, None if merge fails
+    """
     try:
         side_df = load_side_df(pair.side_path)
         greeks_df = load_greeks_df(pair.greeks_path)
@@ -428,10 +601,23 @@ def merge_pair(pair: FilePair) -> ProcessingResult | None:
 
 
 def ensure_directory(path: Path) -> None:
+    """Create directory if it doesn't exist.
+
+    Args:
+        path: Directory path to create
+    """
     path.mkdir(parents=True, exist_ok=True)
 
 
 def unique_destination(destination: Path) -> Path:
+    """Generate unique file path by adding timestamp if file exists.
+
+    Args:
+        destination: Desired file path
+
+    Returns:
+        Unique file path (original or with timestamp suffix)
+    """
     if not destination.exists():
         return destination
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -439,6 +625,14 @@ def unique_destination(destination: Path) -> Path:
 
 
 def archive_files(pair: FilePair) -> None:
+    """Move processed files to archive directory.
+
+    Moves both side-by-side and Greeks files to the processed
+    subdirectory to prevent reprocessing.
+
+    Args:
+        pair: File pair to archive
+    """
     ensure_directory(PROCESSED_DIR)
     for path in [pair.side_path, pair.greeks_path]:
         destination = unique_destination(PROCESSED_DIR / path.name)
@@ -452,6 +646,17 @@ def archive_files(pair: FilePair) -> None:
 
 
 def write_outputs(results: list[ProcessingResult]) -> list[Path]:
+    """Generate output CSV files from processing results.
+
+    Creates a master unified file containing all data, plus individual
+    files split by symbol and date.
+
+    Args:
+        results: List of successfully processed results
+
+    Returns:
+        List of output file paths created
+    """
     if not results:
         LOGGER.info("No valid pairs to process")
         return []
@@ -472,6 +677,11 @@ def write_outputs(results: list[ProcessingResult]) -> list[Path]:
 
 
 def process_pairs() -> None:
+    """Main processing workflow.
+
+    Discovers file pairs, validates them, merges data, writes outputs,
+    and archives successfully processed files.
+    """
     ensure_directory(INPUT_DIR)
     pairs = discover_pairs(INPUT_DIR)
     LOGGER.info("Processing %s complete pairs", len(pairs))
@@ -497,6 +707,7 @@ def process_pairs() -> None:
 
 
 def configure_logging() -> None:
+    """Configure logging format and level for the application."""
     logging.basicConfig(
         level=logging.INFO,
         format="[%(asctime)s] [%(levelname)s] [%(name)s] [%(funcName)s] - %(message)s",
@@ -504,6 +715,7 @@ def configure_logging() -> None:
 
 
 def main() -> None:
+    """Application entry point."""
     configure_logging()
     process_pairs()
 
