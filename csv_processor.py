@@ -645,6 +645,22 @@ def archive_files(pair: FilePair) -> None:
             LOGGER.error("Failed to archive %s: %s", path.name, exc)
 
 
+def normalize_decimals(df: pd.DataFrame, decimal_places: int = 3) -> pd.DataFrame:
+    """Normalize numeric columns to a fixed number of decimal places.
+
+    Args:
+        df: DataFrame to normalize
+        decimal_places: Number of decimal places to round to (default: 3)
+
+    Returns:
+        DataFrame with normalized decimal values
+    """
+    numeric_columns = df.select_dtypes(include=["float64", "float32"]).columns
+    for col in numeric_columns:
+        df[col] = df[col].round(decimal_places)
+    return df
+
+
 def write_outputs(results: list[ProcessingResult]) -> list[Path]:
     """Generate output CSV files from processing results.
 
@@ -664,6 +680,7 @@ def write_outputs(results: list[ProcessingResult]) -> list[Path]:
     ensure_directory(OUTPUT_DIR)
     combined = pd.concat([result.dataframe for result in results], ignore_index=True)
     combined = combined.sort_values(by=["Symbol", "Date", "Expiry", "Strike"])
+    combined = normalize_decimals(combined, decimal_places=3)
     master_path = OUTPUT_DIR / "options_unified_raw.csv"
     combined.to_csv(master_path, index=False)
 
