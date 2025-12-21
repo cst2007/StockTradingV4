@@ -123,8 +123,8 @@ def process_pair():
         base_calc_path = BASE_CALC_OUTPUT_DIR / base_calc_filename
         result.dataframe.to_csv(base_calc_path, index=False)
 
-        # Archive the processed files
-        archive_files(target_pair)
+        # Archiving disabled to allow reprocessing of pairs with updated data
+        # archive_files(target_pair)
 
         LOGGER.info("Successfully processed %s/%s/%s with spot=%s", ticker, expiry, run_date, spot_value)
 
