@@ -717,8 +717,9 @@ def process_pairs() -> None:
     if not output_paths:
         return
 
-    for result in results:
-        archive_files(result.pair)
+    # Archiving disabled to allow reprocessing of pairs with updated data
+    # for result in results:
+    #     archive_files(result.pair)
 
     LOGGER.info("Processed %s pairs", len(results))
 
