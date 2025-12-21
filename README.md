@@ -25,6 +25,8 @@ This processor automates the workflow of:
 
 - Python 3.10 or higher
 - pandas
+- flask (for web UI)
+- numpy
 
 ## Installation
 
@@ -81,16 +83,48 @@ The first 8 columns represent call Greeks, `Strike` is in the middle, and the la
 
 ```
 StockTradingV4/
+├── app.py                  # Web UI Flask application
 ├── csv_processor.py        # Main processing script
-├── requirements.txt         # Python dependencies
-├── README.md               # This file
-├── input/                  # Place CSV files here
-│   └── processed/         # Archived processed files (auto-created)
+├── generate_base_calculations.py  # Calculate exposures and rankings
+├── requirements.txt        # Python dependencies
+├── README.md              # This file
+├── WEB_UI_GUIDE.md        # Web UI documentation
+├── templates/             # HTML templates
+│   └── index.html        # Main web UI template
+├── input/                 # Place CSV files here
+│   └── processed/        # Archived processed files (auto-created)
 └── output/
-    └── processing/        # Generated output files (auto-created)
+    ├── processing/       # Generated unified options files (auto-created)
+    └── base_calculations/  # Generated base calculations (auto-created)
 ```
 
 ## Usage
+
+### Option 1: Web UI (Recommended)
+
+1. Place your CSV files in the `input/` directory
+
+2. Start the web UI:
+```bash
+python app.py
+```
+
+3. Open your browser and navigate to `http://localhost:5000`
+
+4. For each pair:
+   - Enter the spot value for the underlying asset
+   - Click "Process Pair" to process that specific pair
+   - View the results and output file names
+
+5. Check the output files in:
+   - `output/processing/` - Unified options data
+   - `output/base_calculations/` - Calculated exposures and rankings
+
+6. Successfully processed files are automatically moved to `input/processed/`
+
+For detailed web UI instructions, see [WEB_UI_GUIDE.md](WEB_UI_GUIDE.md).
+
+### Option 2: Command Line
 
 1. Place your CSV files in the `input/` directory
 
@@ -99,11 +133,18 @@ StockTradingV4/
 python csv_processor.py
 ```
 
-3. Check the output in `output/processing/`:
+3. Run base calculations:
+```bash
+python generate_base_calculations.py
+```
+
+4. Check the output in `output/processing/`:
    - `options_unified_raw.csv` - Master file containing all processed data
    - `options_unified_<SYMBOL>_<DATE>.csv` - Per-symbol/date files
 
-4. Successfully processed files are moved to `input/processed/`
+5. Successfully processed files are moved to `input/processed/`
+
+**Note:** When using the command line approach, the Spot value will be set to NA and needs to be filled in manually before running base calculations.
 
 ## Output Format
 
