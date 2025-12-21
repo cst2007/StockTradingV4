@@ -242,13 +242,22 @@ def read_header(file_path: Path) -> list[str]:
 def normalize_headers(headers: list[str]) -> list[str]:
     """Normalize header strings for case-insensitive comparison.
 
+    Also normalizes 'Latest' to 'Last' to handle TSLL file format variations.
+
     Args:
         headers: List of header strings
 
     Returns:
-        List of normalized headers (stripped and lowercased)
+        List of normalized headers (stripped, lowercased, with 'latest' -> 'last')
     """
-    return [header.strip().lower() for header in headers]
+    normalized = []
+    for header in headers:
+        h = header.strip().lower()
+        # Normalize 'latest' to 'last' for TSLL compatibility
+        # Handle both standalone "latest" and compound headers like "latest trade"
+        h = h.replace("latest", "last")
+        normalized.append(h)
+    return normalized
 
 
 def validate_headers(
