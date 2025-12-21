@@ -1,4 +1,4 @@
-Type,Latest,Bid,Ask,Change,Volume,"Open Int",IV,"Last Trade",Strike,Type,Latest,Bid,Ask,Change,Volume,"Open Int",IV,"Last Trade"
+Type,Last,Bid,Ask,Change,Volume,"Open Int",IV,"Last Trade",Strike,Type,Last,Bid,Ask,Change,Volume,"Open Int",IV,"Last Trade"
 Call,11.50,10.10,12.20,unch,0,0,259.73%,12/16/25,11.00,Put,0.01,0.00,0.31,unch,0,214,399.61%,12/15/25
 Call,8.15,9.10,11.25,unch,0,0,251.40%,12/12/25,12.00,Put,0.06,0.00,0.21,unch,0,0,324.78%,12/09/25
 Call,5.65,8.10,10.25,unch,0,0,221.79%,12/02/25,13.00,Put,0.01,0.00,0.01,-0.03,195,10,172.38%,12/19/25
