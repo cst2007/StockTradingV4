@@ -138,11 +138,17 @@ python csv_processor.py
 python generate_base_calculations.py
 ```
 
-4. Check the output in `output/processing/`:
+4. (Optional) Compute weekly strike scoring z-scores for a single expiry:
+```bash
+python weekly_strike_scores.py --input output/processing/options_unified_<SYMBOL>_<DATE>.csv \
+  --output weekly_strike_scores.csv --window-percent 0.02 --include-flags --include-diagnostics
+```
+
+5. Check the output in `output/processing/`:
    - `options_unified_raw.csv` - Master file containing all processed data
    - `options_unified_<SYMBOL>_<DATE>.csv` - Per-symbol/date files
 
-5. Successfully processed files are moved to `input/processed/`
+6. Successfully processed files are moved to `input/processed/`
 
 **Note:** When using the command line approach, the Spot value will be set to NA and needs to be filled in manually before running base calculations.
 
