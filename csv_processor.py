@@ -126,6 +126,7 @@ OUTPUT_COLUMNS = [
     "call_delta",
     "call_gamma",
     "call_theta",
+    "call_vega",
     "call_open_interest",
     "call_volume",
     "Call_IV",
@@ -133,6 +134,7 @@ OUTPUT_COLUMNS = [
     "puts_delta",
     "put_gamma",
     "put_theta",
+    "put_vega",
     "puts_open_interest",
     "put_volume",
     "Put_IV",
@@ -527,9 +529,11 @@ def load_greeks_df(greeks_path: Path) -> pd.DataFrame:
     data["call_delta"] = parse_numeric_series(data["call_delta"], greeks_path, "call_delta")
     data["call_gamma"] = parse_numeric_series(data["call_gamma"], greeks_path, "call_gamma")
     data["call_theta"] = parse_numeric_series(data["call_theta"], greeks_path, "call_theta")
+    data["call_vega"] = parse_numeric_series(data["call_vega"], greeks_path, "call_vega")
     data["puts_delta"] = parse_numeric_series(data["puts_delta"], greeks_path, "puts_delta")
     data["put_gamma"] = parse_numeric_series(data["put_gamma"], greeks_path, "put_gamma")
     data["put_theta"] = parse_numeric_series(data["put_theta"], greeks_path, "put_theta")
+    data["put_vega"] = parse_numeric_series(data["put_vega"], greeks_path, "put_vega")
     data = data.dropna(subset=["Strike"])
     return data[
         [
@@ -537,9 +541,11 @@ def load_greeks_df(greeks_path: Path) -> pd.DataFrame:
             "call_delta",
             "call_gamma",
             "call_theta",
+            "call_vega",
             "puts_delta",
             "put_gamma",
             "put_theta",
+            "put_vega",
             "call_iv",
             "put_iv",
         ]
