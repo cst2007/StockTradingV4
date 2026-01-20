@@ -274,6 +274,338 @@ def calculate_z_scores(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def classify_z_band(z_value: float) -> str:
+    """Classify a z-score into a band.
+
+    Args:
+        z_value: Z-score value
+
+    Returns:
+        Band string
+    """
+    if pd.isna(z_value):
+        return "N/A"
+    elif z_value <= -2.0:
+        return "≤ −2.0"
+    elif z_value <= -1.5:
+        return "−2.0 to −1.5"
+    elif z_value <= -0.75:
+        return "−1.5 to −0.75"
+    elif z_value <= 0.75:
+        return "−0.75 to +0.75"
+    elif z_value <= 1.5:
+        return "0.75 to +1.5"
+    else:
+        return "≥ +1.5"
+
+
+def add_decision_tables(df: pd.DataFrame) -> pd.DataFrame:
+    """Add decision table columns based on z-score bands.
+
+    Implements trading strategy recommendations for Cash Secured Puts (CSP)
+    and Covered Calls (CC) based on z-score bands for:
+    - DEX_z: Directional pressure
+    - GEX_z: Gamma regime
+    - GEX_SKEW_z: Put/call asymmetry
+    - VOL_SHOCK_z: Volatility sensitivity
+
+    Args:
+        df: DataFrame with z-score columns
+
+    Returns:
+        DataFrame with added decision columns
+    """
+    result = df.copy()
+
+    # Add z-score band classifications
+    for metric in ['DEX', 'GEX', 'GEX_SKEW', 'VOL_SHOCK']:
+        z_col = f'{metric}_z'
+        if z_col in result.columns:
+            result[f'{metric}_z_band'] = result[z_col].apply(classify_z_band)
+
+    # DEX_z Decision Logic
+    def dex_csp_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "❌ Never CSP"
+        elif z <= -1.5:
+            return "❌ Avoid CSP"
+        elif z <= -0.75:
+            return "⚠️ CSP only with strong GEX_z"
+        elif z <= 0.75:
+            return "✅ Ideal CSP zone"
+        elif z <= 1.5:
+            return "✅ Strong CSP"
+        else:
+            return "✅ Best CSP"
+
+    def dex_cc_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "⚠️ CC for protection only"
+        elif z <= -1.5:
+            return "⚠️ CC acceptable at resistance"
+        elif z <= -0.75:
+            return "✅ CC attractive"
+        elif z <= 0.75:
+            return "✅ Ideal CC zone"
+        elif z <= 1.5:
+            return "⚠️ CC only at resistance"
+        else:
+            return "❌ Avoid CC"
+
+    # GEX_z Decision Logic
+    def gex_csp_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "❌ Avoid CSP"
+        elif z <= -1.5:
+            return "❌ Avoid / small size only"
+        elif z <= -0.75:
+            return "⚠️ CSP with confirmation"
+        elif z <= 0.75:
+            return "✅ Normal CSP"
+        elif z <= 1.5:
+            return "✅ Preferred CSP zone"
+        else:
+            return "✅ Best CSP"
+
+    def gex_cc_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "⚠️ CC for protection only"
+        elif z <= -1.5:
+            return "⚠️ Wait / protection only"
+        elif z <= -0.75:
+            return "✅ CC attractive"
+        elif z <= 0.75:
+            return "✅ Normal CC"
+        elif z <= 1.5:
+            return "⚠️ CC less attractive"
+        else:
+            return "⚠️ CC only at resistance"
+
+    # GEX_SKEW_z Decision Logic
+    def gex_skew_csp_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "❌ Avoid CSP"
+        elif z <= -1.5:
+            return "⚠️ CSP only if DEX_z≥0 & GEX_z>0"
+        elif z <= -0.75:
+            return "⚠️ CSP selective"
+        elif z <= 0.75:
+            return "Neutral"
+        elif z <= 1.5:
+            return "✅ CSP favored"
+        else:
+            return "✅ Strongly favors CSP"
+
+    def gex_skew_cc_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "✅ Strongly favors CC"
+        elif z <= -1.5:
+            return "✅ CC favored"
+        elif z <= -0.75:
+            return "✅ CC slightly favored"
+        elif z <= 0.75:
+            return "Neutral"
+        elif z <= 1.5:
+            return "⚠️ CC selective"
+        else:
+            return "❌ Avoid CC"
+
+    def gex_skew_meaning(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "Resistance very strong, support fragile"
+        elif z <= -1.5:
+            return "Sell rips / fade strength"
+        elif z <= -0.75:
+            return "Resistance > support"
+        elif z <= 0.75:
+            return "No side advantage"
+        elif z <= 1.5:
+            return "Support > resistance"
+        else:
+            return "Strong support / dip-buy behavior"
+
+    # VOL_SHOCK_z Decision Logic (same as VEX_z)
+    def vol_shock_csp_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "✅ CSP okay if DEX/GEX ok"
+        elif z <= -1.5:
+            return "✅ CSP okay"
+        elif z <= -0.75:
+            return "✅ Normal"
+        elif z <= 0.75:
+            return "✅ Ideal zone"
+        elif z <= 1.5:
+            return "⚠️ CSP only if strong support"
+        else:
+            return "❌ Avoid CSP"
+
+    def vol_shock_cc_action(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "✅ CC okay"
+        elif z <= -1.5:
+            return "✅ CC okay"
+        elif z <= -0.75:
+            return "✅ Normal"
+        elif z <= 0.75:
+            return "✅ Ideal zone"
+        elif z <= 1.5:
+            return "⚠️ CC only at resistance"
+        else:
+            return "❌ Avoid CC"
+
+    # Apply decision functions
+    if 'DEX_z' in result.columns:
+        result['DEX_CSP_Action'] = result['DEX_z'].apply(dex_csp_action)
+        result['DEX_CC_Action'] = result['DEX_z'].apply(dex_cc_action)
+
+    if 'GEX_z' in result.columns:
+        result['GEX_CSP_Action'] = result['GEX_z'].apply(gex_csp_action)
+        result['GEX_CC_Action'] = result['GEX_z'].apply(gex_cc_action)
+
+    if 'GEX_SKEW_z' in result.columns:
+        result['GEX_SKEW_CSP_Action'] = result['GEX_SKEW_z'].apply(gex_skew_csp_action)
+        result['GEX_SKEW_CC_Action'] = result['GEX_SKEW_z'].apply(gex_skew_cc_action)
+        result['GEX_SKEW_Equity_Meaning'] = result['GEX_SKEW_z'].apply(gex_skew_meaning)
+
+    if 'VOL_SHOCK_z' in result.columns:
+        result['VOL_SHOCK_CSP_Action'] = result['VOL_SHOCK_z'].apply(vol_shock_csp_action)
+        result['VOL_SHOCK_CC_Action'] = result['VOL_SHOCK_z'].apply(vol_shock_cc_action)
+
+    # Hard Block Rules
+    def csp_hard_blocks(row):
+        """Check if CSP should be blocked based on hard rules."""
+        blocks = []
+
+        # Check each hard block condition
+        if 'DEX_z' in row and not pd.isna(row['DEX_z']):
+            if row['DEX_z'] <= -1.5:
+                blocks.append("DEX_z ≤ -1.5 (strong downside)")
+
+        if 'GEX_z' in row and not pd.isna(row['GEX_z']):
+            if row['GEX_z'] <= -1.5:
+                blocks.append("GEX_z ≤ -1.5 (instability)")
+
+        if 'VOL_SHOCK_z' in row and not pd.isna(row['VOL_SHOCK_z']):
+            if row['VOL_SHOCK_z'] >= 1.5:
+                blocks.append("VOL_SHOCK_z ≥ +1.5 (IV shock risk)")
+
+            # Special case: VEX extreme-low constraint
+            if row['VOL_SHOCK_z'] <= -2.0:
+                dex_ok = 'DEX_z' in row and not pd.isna(row['DEX_z']) and row['DEX_z'] >= 0
+                gex_ok = 'GEX_z' in row and not pd.isna(row['GEX_z']) and row['GEX_z'] >= 0
+                if not (dex_ok and gex_ok):
+                    blocks.append("VOL_SHOCK_z ≤ -2.0 without DEX≥0 & GEX≥0")
+
+        if blocks:
+            return "CSP_NO: " + "; ".join(blocks)
+        else:
+            return "CSP_OK"
+
+    def cc_hard_blocks(row):
+        """Check if CC should be blocked based on hard rules."""
+        blocks = []
+
+        # Check each hard block condition
+        if 'DEX_z' in row and not pd.isna(row['DEX_z']):
+            if row['DEX_z'] >= 1.5:
+                blocks.append("DEX_z ≥ +1.5 (extreme upside suppression)")
+
+        if 'VOL_SHOCK_z' in row and not pd.isna(row['VOL_SHOCK_z']):
+            if row['VOL_SHOCK_z'] >= 1.5:
+                blocks.append("VOL_SHOCK_z ≥ +1.5 (vol expansion risk)")
+
+        if 'GEX_z' in row and not pd.isna(row['GEX_z']):
+            if row['GEX_z'] <= -1.5:
+                blocks.append("GEX_z ≤ -1.5 (prefer waiting)")
+
+        if blocks:
+            return "CC_CONDITIONAL: " + "; ".join(blocks)
+        else:
+            return "CC_OK"
+
+    def csp_combined_signal(row):
+        """Combined CSP signal based on all criteria."""
+        if row.get('CSP_Hard_Blocks', '').startswith('CSP_NO'):
+            return "❌ CSP_NO (Hard Block)"
+
+        # Base requirements
+        dex_ok = 'DEX_z' in row and not pd.isna(row['DEX_z']) and row['DEX_z'] >= -0.75
+        gex_ok = 'GEX_z' in row and not pd.isna(row['GEX_z']) and row['GEX_z'] > -0.75
+        vol_ok = 'VOL_SHOCK_z' in row and not pd.isna(row['VOL_SHOCK_z']) and row['VOL_SHOCK_z'] <= 0.75
+
+        if not (dex_ok and gex_ok and vol_ok):
+            return "⚠️ CSP_CONDITIONAL (Base criteria not met)"
+
+        # Upgrade conditions
+        dex_strong = 'DEX_z' in row and not pd.isna(row['DEX_z']) and row['DEX_z'] >= 0
+        gex_strong = 'GEX_z' in row and not pd.isna(row['GEX_z']) and row['GEX_z'] >= 0.75
+        vol_neutral = 'VOL_SHOCK_z' in row and not pd.isna(row['VOL_SHOCK_z']) and -0.75 <= row['VOL_SHOCK_z'] <= 0.75
+
+        upgrade_count = sum([dex_strong, gex_strong, vol_neutral])
+
+        if upgrade_count >= 2:
+            return "✅✅ CSP_STRONG (Multiple upgrades)"
+        elif upgrade_count >= 1:
+            return "✅ CSP_GOOD (Some upgrades)"
+        else:
+            return "✅ CSP_OK (Base criteria met)"
+
+    def cc_combined_signal(row):
+        """Combined CC signal based on all criteria."""
+        if row.get('CC_Hard_Blocks', '').startswith('CC_CONDITIONAL'):
+            return "⚠️ CC_CONDITIONAL (Check blocks)"
+
+        # Base requirements
+        dex_ok = 'DEX_z' in row and not pd.isna(row['DEX_z']) and row['DEX_z'] <= 0.75
+        vol_ok = 'VOL_SHOCK_z' in row and not pd.isna(row['VOL_SHOCK_z']) and row['VOL_SHOCK_z'] <= 1.0
+        gex_ok = 'GEX_z' in row and not pd.isna(row['GEX_z']) and row['GEX_z'] >= -0.75
+
+        if not (dex_ok and vol_ok and gex_ok):
+            return "⚠️ CC_CONDITIONAL (Base criteria not met)"
+
+        # Upgrade conditions
+        dex_strong = 'DEX_z' in row and not pd.isna(row['DEX_z']) and row['DEX_z'] <= 0
+        vol_strong = 'VOL_SHOCK_z' in row and not pd.isna(row['VOL_SHOCK_z']) and row['VOL_SHOCK_z'] <= 0
+        gex_tight = 'GEX_z' in row and not pd.isna(row['GEX_z']) and row['GEX_z'] >= 0.75
+
+        upgrade_count = sum([dex_strong, vol_strong, gex_tight])
+
+        if upgrade_count >= 2:
+            return "✅✅ CC_STRONG (Multiple upgrades)"
+        elif upgrade_count >= 1:
+            return "✅ CC_GOOD (Some upgrades)"
+        else:
+            return "✅ CC_OK (Base criteria met)"
+
+    # Apply hard block checks
+    result['CSP_Hard_Blocks'] = result.apply(csp_hard_blocks, axis=1)
+    result['CC_Hard_Blocks'] = result.apply(cc_hard_blocks, axis=1)
+
+    # Apply combined signals
+    result['CSP_Combined_Signal'] = result.apply(csp_combined_signal, axis=1)
+    result['CC_Combined_Signal'] = result.apply(cc_combined_signal, axis=1)
+
+    return result
+
+
 def add_rankings(df: pd.DataFrame) -> pd.DataFrame:
     """Add ranking columns based on absolute values of key metrics.
 
@@ -384,6 +716,9 @@ def process_unified_files() -> list[Path]:
             # Add z-scores
             result_df = calculate_z_scores(result_df)
 
+            # Add decision tables based on z-score bands
+            result_df = add_decision_tables(result_df)
+
             # Add rankings
             result_df = add_rankings(result_df)
 
@@ -440,6 +775,7 @@ def main() -> None:
     LOGGER.info("  - VOL_SHOCK: Vega-based volatility sensitivity")
     LOGGER.info("  - THETA_EXPO: Time decay exposure")
     LOGGER.info("  - Z-scores: Cross-strike statistical significance")
+    LOGGER.info("  - Decision Tables: CSP/CC recommendations based on z-score bands")
     LOGGER.info("")
 
     output_paths = process_unified_files()
