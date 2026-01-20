@@ -24,7 +24,14 @@ from csv_processor import (
     FilePair,
     FileSetKey,
 )
-from generate_base_calculations import calculate_exposures, add_rankings
+from generate_base_calculations import (
+    calculate_exposures,
+    calculate_z_scores,
+    add_decision_tables,
+    add_rankings,
+    calculate_window_totals,
+    OUTPUT_DIR as BASE_CALC_DIR,
+)
 
 app = Flask(__name__)
 LOGGER = logging.getLogger("options_web_ui")
@@ -104,8 +111,21 @@ def process_pair():
         # Calculate exposures
         result.dataframe = calculate_exposures(result.dataframe)
 
+        # Calculate window totals
+        totals = calculate_window_totals(result.dataframe)
+
+        # Add z-scores
+        result.dataframe = calculate_z_scores(result.dataframe)
+
+        # Add decision tables
+        result.dataframe = add_decision_tables(result.dataframe)
+
         # Add rankings
         result.dataframe = add_rankings(result.dataframe)
+
+        # Add totals as metadata columns
+        for key, value in totals.items():
+            result.dataframe[key] = value
 
         # Normalize decimals
         result.dataframe = normalize_decimals(result.dataframe, decimal_places=3)
@@ -137,6 +157,96 @@ def process_pair():
 
     except Exception as exc:
         LOGGER.error("Error processing pair: %s", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/results")
+def results():
+    """Render the results page showing decision table analysis."""
+    # Get list of available base calculation files
+    base_calc_files = []
+    if BASE_CALC_DIR.exists():
+        for file in BASE_CALC_DIR.glob("base_calculations_*.csv"):
+            base_calc_files.append({
+                "filename": file.name,
+                "name": file.stem.replace("base_calculations_", "")
+            })
+
+    return render_template("results.html", files=base_calc_files)
+
+
+@app.route("/api/calculation/<filename>")
+def get_calculation_data(filename):
+    """Get calculation data for a specific file."""
+    try:
+        # Security: only allow base_calculations files
+        if not filename.startswith("base_calculations_"):
+            return jsonify({"success": False, "error": "Invalid filename"}), 400
+
+        file_path = BASE_CALC_DIR / filename
+        if not file_path.exists():
+            return jsonify({"success": False, "error": "File not found"}), 404
+
+        # Read the CSV file
+        df = pd.read_csv(file_path)
+
+        # Get window totals from first row
+        window_totals = {}
+        if len(df) > 0:
+            for col in df.columns:
+                if col.endswith('_total') or col.startswith('Total_'):
+                    window_totals[col] = float(df[col].iloc[0]) if pd.notna(df[col].iloc[0]) else None
+
+        # Select key columns for display
+        display_columns = [
+            'Strike', 'Spot',
+            'DEX', 'DEX_z', 'DEX_z_band',
+            'GEX', 'GEX_z', 'GEX_z_band',
+            'GEX_SKEW', 'GEX_SKEW_z', 'GEX_SKEW_z_band',
+            'VOL_SHOCK', 'VOL_SHOCK_z', 'VOL_SHOCK_z_band',
+            'DEX_CSP_Action', 'DEX_CC_Action',
+            'GEX_CSP_Action', 'GEX_CC_Action',
+            'GEX_SKEW_CSP_Action', 'GEX_SKEW_CC_Action',
+            'VOL_SHOCK_CSP_Action', 'VOL_SHOCK_CC_Action',
+            'GEX_SKEW_Equity_Meaning',
+            'CSP_Hard_Blocks', 'CC_Hard_Blocks',
+            'CSP_Combined_Signal', 'CC_Combined_Signal',
+            'call_open_interest', 'puts_open_interest', 'OI_Imbalance',
+            'Call_IV', 'Put_IV',
+        ]
+
+        # Filter to only columns that exist
+        available_columns = [col for col in display_columns if col in df.columns]
+        result_df = df[available_columns].copy()
+
+        # Round numeric columns for cleaner display
+        for col in result_df.select_dtypes(include=['float64']).columns:
+            result_df[col] = result_df[col].round(3)
+
+        # Convert to dict for JSON
+        data = result_df.to_dict('records')
+
+        # Add summary statistics
+        summary = {
+            'total_strikes': len(df),
+            'csp_strong_count': len(df[df['CSP_Combined_Signal'].str.contains('STRONG', na=False)]),
+            'cc_strong_count': len(df[df['CC_Combined_Signal'].str.contains('STRONG', na=False)]),
+            'csp_blocked_count': len(df[df['CSP_Hard_Blocks'].str.contains('CSP_NO', na=False)]),
+            'cc_conditional_count': len(df[df['CC_Hard_Blocks'].str.contains('CC_CONDITIONAL', na=False)]),
+        }
+
+        return jsonify({
+            "success": True,
+            "data": data,
+            "window_totals": window_totals,
+            "summary": summary,
+            "symbol": df['Symbol'].iloc[0] if 'Symbol' in df.columns and len(df) > 0 else "Unknown",
+            "date": df['Date'].iloc[0] if 'Date' in df.columns and len(df) > 0 else "Unknown",
+            "expiry": df['Expiry'].iloc[0] if 'Expiry' in df.columns and len(df) > 0 else "Unknown",
+        })
+
+    except Exception as exc:
+        LOGGER.error("Error getting calculation data: %s", exc)
         return jsonify({"success": False, "error": str(exc)}), 500
 
 

@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Options Analysis - Decision Tables</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .controls {
+            padding: 30px;
+            border-bottom: 2px solid #e0e0e0;
+            background: #f8f9fa;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .filter-btn {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .filter-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .summary {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e0e0e0;
+            display: none;
+        }
+
+        .summary.visible {
+            display: block;
+        }
+
+        .summary h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .summary-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .summary-card.positive .value {
+            color: #10b981;
+        }
+
+        .summary-card.negative .value {
+            color: #ef4444;
+        }
+
+        .summary-card.warning .value {
+            color: #f59e0b;
+        }
+
+        .window-totals {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .window-totals h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .totals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .total-item {
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .total-item .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .total-item .value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .strike-cell {
+            font-weight: 700;
+            color: #667eea;
+            font-size: 14px;
+        }
+
+        .z-score {
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .z-extreme-negative {
+            background: #fee;
+            color: #c00;
+        }
+
+        .z-negative {
+            background: #ffd;
+            color: #990;
+        }
+
+        .z-neutral {
+            background: #efe;
+            color: #060;
+        }
+
+        .z-positive {
+            background: #ddf;
+            color: #009;
+        }
+
+        .z-extreme-positive {
+            background: #fde;
+            color: #909;
+        }
+
+        .action-ok {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .action-warning {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        .action-block {
+            color: #ef4444;
+            font-weight: 600;
+        }
+
+        .signal-strong {
+            background: #10b981;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .signal-good {
+            background: #34d399;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .signal-ok {
+            background: #60a5fa;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .signal-conditional {
+            background: #f59e0b;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .signal-no {
+            background: #ef4444;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #666;
+            font-size: 18px;
+        }
+
+        .error {
+            background: #fee;
+            color: #c00;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px;
+            color: #666;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 15px 30px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .tab:hover {
+            background: #f8f9fa;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .highlight-row {
+            background: #fef3c7 !important;
+            font-weight: 600;
+        }
+
+        .nav-links {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .nav-links a {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Options Decision Table Analysis</h1>
+            <p>Z-Score Based CSP & CC Strategy Recommendations</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="fileSelect">Select Analysis File:</label>
+                <select id="fileSelect">
+                    <option value="">-- Select a file --</option>
+                    {% for file in files %}
+                    <option value="{{ file.filename }}">{{ file.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Filter Strikes:</label>
+                <div class="filters">
+                    <button class="filter-btn active" data-filter="all">All Strikes</button>
+                    <button class="filter-btn" data-filter="csp-strong">✅ CSP Strong</button>
+                    <button class="filter-btn" data-filter="cc-strong">✅ CC Strong</button>
+                    <button class="filter-btn" data-filter="blocked">❌ Blocked</button>
+                    <button class="filter-btn" data-filter="neutral">Neutral Zone</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary" id="summarySection">
+            <h2>Summary Statistics</h2>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <h3>Symbol & Date</h3>
+                    <div class="value" id="symbolDate">-</div>
+                </div>
+                <div class="summary-card positive">
+                    <h3>CSP Strong Opportunities</h3>
+                    <div class="value" id="cspStrongCount">0</div>
+                </div>
+                <div class="summary-card positive">
+                    <h3>CC Strong Opportunities</h3>
+                    <div class="value" id="ccStrongCount">0</div>
+                </div>
+                <div class="summary-card warning">
+                    <h3>Blocked Strikes</h3>
+                    <div class="value" id="blockedCount">0</div>
+                </div>
+            </div>
+
+            <div class="window-totals">
+                <h3>Window Totals (Entire Expiry)</h3>
+                <div class="totals-grid" id="windowTotalsGrid"></div>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="tabs">
+                <div class="tab active" data-tab="overview">Overview</div>
+                <div class="tab" data-tab="csp">CSP Analysis</div>
+                <div class="tab" data-tab="cc">CC Analysis</div>
+                <div class="tab" data-tab="detailed">Detailed Metrics</div>
+            </div>
+
+            <div id="loadingMessage" class="loading">
+                Select a file to view analysis...
+            </div>
+
+            <div id="errorMessage" class="error" style="display: none;"></div>
+
+            <div id="overviewTab" class="tab-content active">
+                <div class="table-container">
+                    <table id="overviewTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Strike</th>
+                                <th>DEX_z</th>
+                                <th>GEX_z</th>
+                                <th>SKEW_z</th>
+                                <th>VOL_z</th>
+                                <th>CSP Signal</th>
+                                <th>CC Signal</th>
+                                <th>Equity Meaning</th>
+                            </tr>
+                        </thead>
+                        <tbody id="overviewTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="cspTab" class="tab-content">
+                <div class="table-container">
+                    <table id="cspTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Strike</th>
+                                <th>DEX_z</th>
+                                <th>DEX Action</th>
+                                <th>GEX_z</th>
+                                <th>GEX Action</th>
+                                <th>VOL_z</th>
+                                <th>VOL Action</th>
+                                <th>SKEW Action</th>
+                                <th>Hard Blocks</th>
+                                <th>Combined Signal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cspTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="ccTab" class="tab-content">
+                <div class="table-container">
+                    <table id="ccTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Strike</th>
+                                <th>DEX_z</th>
+                                <th>DEX Action</th>
+                                <th>GEX_z</th>
+                                <th>GEX Action</th>
+                                <th>VOL_z</th>
+                                <th>VOL Action</th>
+                                <th>SKEW Action</th>
+                                <th>Hard Blocks</th>
+                                <th>Combined Signal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ccTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="detailedTab" class="tab-content">
+                <div class="table-container">
+                    <table id="detailedTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Strike</th>
+                                <th>DEX</th>
+                                <th>GEX</th>
+                                <th>SKEW</th>
+                                <th>VOL_SHOCK</th>
+                                <th>Call OI</th>
+                                <th>Put OI</th>
+                                <th>OI Imbal</th>
+                                <th>Call IV</th>
+                                <th>Put IV</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailedTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="nav-links">
+                <a href="/">← Back to Processing</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let currentFilter = 'all';
+
+        // File selection handler
+        document.getElementById('fileSelect').addEventListener('change', async (e) => {
+            const filename = e.target.value;
+            if (!filename) {
+                document.getElementById('summarySection').classList.remove('visible');
+                document.getElementById('loadingMessage').style.display = 'block';
+                hideAllTables();
+                return;
+            }
+
+            await loadCalculationData(filename);
+        });
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+
+                // Update active tab
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Show corresponding content
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                document.getElementById(tabName + 'Tab').classList.add('active');
+            });
+        });
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update active filter
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                currentFilter = btn.dataset.filter;
+                if (currentData) {
+                    renderTables(currentData);
+                }
+            });
+        });
+
+        async function loadCalculationData(filename) {
+            try {
+                document.getElementById('loadingMessage').textContent = 'Loading...';
+                document.getElementById('loadingMessage').style.display = 'block';
+                document.getElementById('errorMessage').style.display = 'none';
+                document.getElementById('summarySection').classList.remove('visible');
+                hideAllTables();
+
+                const response = await fetch(`/api/calculation/${filename}`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                currentData = result;
+                document.getElementById('loadingMessage').style.display = 'none';
+
+                renderSummary(result);
+                renderTables(result);
+
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = 'Error: ' + error.message;
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('loadingMessage').style.display = 'none';
+            }
+        }
+
+        function renderSummary(result) {
+            document.getElementById('symbolDate').textContent =
+                `${result.symbol} | ${result.date} | Exp: ${result.expiry}`;
+            document.getElementById('cspStrongCount').textContent = result.summary.csp_strong_count;
+            document.getElementById('ccStrongCount').textContent = result.summary.cc_strong_count;
+            document.getElementById('blockedCount').textContent =
+                result.summary.csp_blocked_count + result.summary.cc_conditional_count;
+
+            // Render window totals
+            const totalsGrid = document.getElementById('windowTotalsGrid');
+            totalsGrid.innerHTML = '';
+
+            const importantTotals = ['DEX_total', 'NET_GEX_total', 'GEX_SKEW_total',
+                                    'VEGA_EXPO_total', 'THETA_EXPO_total', 'Total_OI'];
+
+            for (const [key, value] of Object.entries(result.window_totals)) {
+                if (importantTotals.includes(key)) {
+                    const item = document.createElement('div');
+                    item.className = 'total-item';
+                    item.innerHTML = `
+                        <div class="label">${key.replace(/_/g, ' ')}</div>
+                        <div class="value">${formatNumber(value)}</div>
+                    `;
+                    totalsGrid.appendChild(item);
+                }
+            }
+
+            document.getElementById('summarySection').classList.add('visible');
+        }
+
+        function renderTables(result) {
+            const filteredData = applyFilter(result.data);
+
+            renderOverviewTable(filteredData);
+            renderCSPTable(filteredData);
+            renderCCTable(filteredData);
+            renderDetailedTable(filteredData);
+        }
+
+        function applyFilter(data) {
+            if (currentFilter === 'all') return data;
+
+            return data.filter(row => {
+                switch (currentFilter) {
+                    case 'csp-strong':
+                        return row.CSP_Combined_Signal && row.CSP_Combined_Signal.includes('STRONG');
+                    case 'cc-strong':
+                        return row.CC_Combined_Signal && row.CC_Combined_Signal.includes('STRONG');
+                    case 'blocked':
+                        return (row.CSP_Hard_Blocks && row.CSP_Hard_Blocks.includes('CSP_NO')) ||
+                               (row.CC_Hard_Blocks && row.CC_Hard_Blocks.includes('CC_CONDITIONAL'));
+                    case 'neutral':
+                        return row.DEX_z_band === '−0.75 to +0.75' &&
+                               row.GEX_z_band === '−0.75 to +0.75';
+                    default:
+                        return true;
+                }
+            });
+        }
+
+        function renderOverviewTable(data) {
+            const tbody = document.getElementById('overviewTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                if (row.CSP_Combined_Signal && row.CSP_Combined_Signal.includes('STRONG')) {
+                    tr.classList.add('highlight-row');
+                }
+
+                tr.innerHTML = `
+                    <td class="strike-cell">$${row.Strike}</td>
+                    <td>${renderZScore(row.DEX_z)}</td>
+                    <td>${renderZScore(row.GEX_z)}</td>
+                    <td>${renderZScore(row.GEX_SKEW_z)}</td>
+                    <td>${renderZScore(row.VOL_SHOCK_z)}</td>
+                    <td>${renderSignal(row.CSP_Combined_Signal)}</td>
+                    <td>${renderSignal(row.CC_Combined_Signal)}</td>
+                    <td style="font-size: 11px;">${row.GEX_SKEW_Equity_Meaning || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('overviewTable').style.display = data.length > 0 ? 'table' : 'none';
+        }
+
+        function renderCSPTable(data) {
+            const tbody = document.getElementById('cspTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                if (row.CSP_Combined_Signal && row.CSP_Combined_Signal.includes('STRONG')) {
+                    tr.classList.add('highlight-row');
+                }
+
+                tr.innerHTML = `
+                    <td class="strike-cell">$${row.Strike}</td>
+                    <td>${renderZScore(row.DEX_z)}</td>
+                    <td>${renderAction(row.DEX_CSP_Action)}</td>
+                    <td>${renderZScore(row.GEX_z)}</td>
+                    <td>${renderAction(row.GEX_CSP_Action)}</td>
+                    <td>${renderZScore(row.VOL_SHOCK_z)}</td>
+                    <td>${renderAction(row.VOL_SHOCK_CSP_Action)}</td>
+                    <td>${renderAction(row.GEX_SKEW_CSP_Action)}</td>
+                    <td style="font-size: 11px;">${row.CSP_Hard_Blocks || '-'}</td>
+                    <td>${renderSignal(row.CSP_Combined_Signal)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('cspTable').style.display = data.length > 0 ? 'table' : 'none';
+        }
+
+        function renderCCTable(data) {
+            const tbody = document.getElementById('ccTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                if (row.CC_Combined_Signal && row.CC_Combined_Signal.includes('STRONG')) {
+                    tr.classList.add('highlight-row');
+                }
+
+                tr.innerHTML = `
+                    <td class="strike-cell">$${row.Strike}</td>
+                    <td>${renderZScore(row.DEX_z)}</td>
+                    <td>${renderAction(row.DEX_CC_Action)}</td>
+                    <td>${renderZScore(row.GEX_z)}</td>
+                    <td>${renderAction(row.GEX_CC_Action)}</td>
+                    <td>${renderZScore(row.VOL_SHOCK_z)}</td>
+                    <td>${renderAction(row.VOL_SHOCK_CC_Action)}</td>
+                    <td>${renderAction(row.GEX_SKEW_CC_Action)}</td>
+                    <td style="font-size: 11px;">${row.CC_Hard_Blocks || '-'}</td>
+                    <td>${renderSignal(row.CC_Combined_Signal)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('ccTable').style.display = data.length > 0 ? 'table' : 'none';
+        }
+
+        function renderDetailedTable(data) {
+            const tbody = document.getElementById('detailedTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="strike-cell">$${row.Strike}</td>
+                    <td>${formatNumber(row.DEX)}</td>
+                    <td>${formatNumber(row.GEX)}</td>
+                    <td>${formatNumber(row.GEX_SKEW)}</td>
+                    <td>${formatNumber(row.VOL_SHOCK)}</td>
+                    <td>${formatNumber(row.call_open_interest)}</td>
+                    <td>${formatNumber(row.puts_open_interest)}</td>
+                    <td>${formatNumber(row.OI_Imbalance)}</td>
+                    <td>${formatPercent(row.Call_IV)}</td>
+                    <td>${formatPercent(row.Put_IV)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('detailedTable').style.display = data.length > 0 ? 'table' : 'none';
+        }
+
+        function renderZScore(value) {
+            if (value === null || value === undefined) return '-';
+
+            let className = 'z-neutral';
+            if (value <= -2.0) className = 'z-extreme-negative';
+            else if (value <= -0.75) className = 'z-negative';
+            else if (value <= 0.75) className = 'z-neutral';
+            else if (value <= 1.5) className = 'z-positive';
+            else className = 'z-extreme-positive';
+
+            return `<span class="z-score ${className}">${value.toFixed(2)}</span>`;
+        }
+
+        function renderAction(action) {
+            if (!action) return '-';
+
+            let className = 'action-ok';
+            if (action.includes('❌')) className = 'action-block';
+            else if (action.includes('⚠️')) className = 'action-warning';
+
+            return `<span class="${className}">${action}</span>`;
+        }
+
+        function renderSignal(signal) {
+            if (!signal) return '-';
+
+            let className = 'signal-ok';
+            if (signal.includes('STRONG')) className = 'signal-strong';
+            else if (signal.includes('GOOD')) className = 'signal-good';
+            else if (signal.includes('CONDITIONAL')) className = 'signal-conditional';
+            else if (signal.includes('NO')) className = 'signal-no';
+
+            // Extract just the signal name for display
+            const parts = signal.split(' ');
+            const signalType = parts[parts.length - 1].replace('(', '').replace(')', '');
+
+            return `<span class="${className}">${signal}</span>`;
+        }
+
+        function formatNumber(value) {
+            if (value === null || value === undefined) return '-';
+            return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        }
+
+        function formatPercent(value) {
+            if (value === null || value === undefined) return '-';
+            return (value * 100).toFixed(1) + '%';
+        }
+
+        function hideAllTables() {
+            document.getElementById('overviewTable').style.display = 'none';
+            document.getElementById('cspTable').style.display = 'none';
+            document.getElementById('ccTable').style.display = 'none';
+            document.getElementById('detailedTable').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
