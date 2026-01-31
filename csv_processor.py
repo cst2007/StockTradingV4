@@ -126,6 +126,7 @@ OUTPUT_COLUMNS = [
     "call_delta",
     "call_gamma",
     "call_theta",
+    "call_vega",
     "call_open_interest",
     "call_volume",
     "Call_IV",
@@ -133,6 +134,7 @@ OUTPUT_COLUMNS = [
     "puts_delta",
     "put_gamma",
     "put_theta",
+    "put_vega",
     "puts_open_interest",
     "put_volume",
     "Put_IV",
@@ -234,7 +236,7 @@ def read_header(file_path: Path) -> list[str]:
     Returns:
         List of header column names
     """
-    with file_path.open(newline="", encoding="utf-8") as handle:
+    with file_path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.reader(handle)
         return next(reader, [])
 
@@ -256,8 +258,12 @@ def validate_headers(
     expected_headers: list[str],
     expected_columns: int,
     strike_index: int,
-) -> bool:
+) -> tuple[bool, str]:
     """Validate CSV file has expected structure and headers.
+
+    Checks that the file contains the essential columns needed for processing.
+    Allows minor variations in column count and header names as long as
+    Strike and the core data columns are present.
 
     Args:
         file_path: Path to CSV file to validate
@@ -266,34 +272,73 @@ def validate_headers(
         strike_index: Index where 'Strike' column should be located
 
     Returns:
-        True if file is valid, False otherwise
+        Tuple of (is_valid, error_message). error_message is empty string if valid.
     """
     try:
         headers = read_header(file_path)
     except Exception as exc:
-        LOGGER.error("Failed to read %s: %s", file_path.name, exc)
-        return False
+        msg = f"{file_path.name}: failed to read ({exc})"
+        LOGGER.error(msg)
+        return False, msg
 
-    if len(headers) != expected_columns:
-        LOGGER.error(
-            "%s has %s columns, expected %s",
-            file_path.name,
-            len(headers),
-            expected_columns,
-        )
-        return False
+    # Log actual headers for diagnostics
+    LOGGER.info("  Headers in %s (%d cols): %s", file_path.name, len(headers), headers)
 
-    normalized_actual = normalize_headers(headers)
-    normalized_expected = normalize_headers(expected_headers)
-    if normalized_actual != normalized_expected:
-        LOGGER.error("%s has invalid headers", file_path.name)
-        return False
+    if not headers:
+        msg = f"{file_path.name}: empty or missing header row"
+        LOGGER.error(msg)
+        return False, msg
 
-    if strike_index >= len(headers) or headers[strike_index].strip().lower() != "strike":
-        LOGGER.error("%s missing Strike column", file_path.name)
-        return False
+    # Find Strike column anywhere in headers (case-insensitive)
+    strike_positions = [
+        i for i, h in enumerate(headers) if h.strip().lower() == "strike"
+    ]
+    if not strike_positions:
+        msg = f"{file_path.name}: missing Strike column. Found headers: {headers}"
+        LOGGER.error(msg)
+        return False, msg
 
-    return True
+    # Determine if this is a side-by-side or greeks file based on filename
+    is_side = "side-by-side" in file_path.name.lower()
+    is_greeks = "greeks" in file_path.name.lower()
+
+    if is_side:
+        # Side-by-side needs: Strike, Volume, Open Int/Interest, IV
+        normalized = [h.strip().lower() for h in headers]
+        has_volume = "volume" in normalized
+        has_oi = "open int" in normalized or "open interest" in normalized
+        has_iv = "iv" in normalized
+        missing = []
+        if not has_volume:
+            missing.append("Volume")
+        if not has_oi:
+            missing.append("Open Int/Interest")
+        if not has_iv:
+            missing.append("IV")
+        if missing:
+            msg = f"{file_path.name}: missing columns {missing}. Found: {headers}"
+            LOGGER.error(msg)
+            return False, msg
+
+    elif is_greeks:
+        # Greeks needs: Strike, Delta, Gamma, Theta
+        normalized = [h.strip().lower() for h in headers]
+        has_delta = "delta" in normalized
+        has_gamma = "gamma" in normalized
+        has_theta = "theta" in normalized
+        missing = []
+        if not has_delta:
+            missing.append("Delta")
+        if not has_gamma:
+            missing.append("Gamma")
+        if not has_theta:
+            missing.append("Theta")
+        if missing:
+            msg = f"{file_path.name}: missing columns {missing}. Found: {headers}"
+            LOGGER.error(msg)
+            return False, msg
+
+    return True, ""
 
 
 def parse_numeric_series(
@@ -456,25 +501,58 @@ def choose_newest(current_path: Path, new_path: Path, key: FileSetKey) -> Path:
     return current_path
 
 
-def validate_pair(pair: FilePair) -> bool:
+def validate_pair(pair: FilePair) -> tuple[bool, str]:
     """Validate both files in a pair have correct structure.
 
     Args:
         pair: File pair to validate
 
     Returns:
-        True if both files are valid, False otherwise
+        Tuple of (is_valid, error_message). error_message is empty string if valid.
     """
-    side_ok = validate_headers(pair.side_path, EXPECTED_SIDE_HEADERS, 19, 9)
-    greeks_ok = validate_headers(pair.greeks_path, EXPECTED_GREEKS_HEADERS, 17, 8)
-    return side_ok and greeks_ok
+    side_ok, side_err = validate_headers(pair.side_path, EXPECTED_SIDE_HEADERS, 19, 9)
+    greeks_ok, greeks_err = validate_headers(pair.greeks_path, EXPECTED_GREEKS_HEADERS, 17, 8)
+    errors = [e for e in [side_err, greeks_err] if e]
+    return side_ok and greeks_ok, "; ".join(errors)
+
+
+def find_strike_index(headers: list[str]) -> int:
+    """Find the index of the Strike column (case-insensitive).
+
+    Args:
+        headers: List of header strings
+
+    Returns:
+        Index of the Strike column, or -1 if not found
+    """
+    for i, h in enumerate(headers):
+        if h.strip().lower() == "strike":
+            return i
+    return -1
+
+
+def strip_pandas_suffix(name: str) -> str:
+    """Strip pandas deduplication suffix (.1, .2, etc.) from column names.
+
+    When pandas reads CSVs with duplicate headers, it appends .1, .2 etc.
+    This strips that suffix to get the base column name.
+
+    Args:
+        name: Column name possibly with suffix
+
+    Returns:
+        Base column name without suffix
+    """
+    import re
+    return re.sub(r'\.\d+$', '', name.strip())
 
 
 def load_side_df(side_path: Path) -> pd.DataFrame:
     """Load and parse options side-by-side CSV file.
 
-    Reads call and put option data including volume, open interest,
-    and implied volatility. Cleans numeric values and percentages.
+    Reads the file using actual headers, locates the Strike column to split
+    call-side (left) and put-side (right), then maps columns by name.
+    Handles variations in column names and counts across data sources.
 
     Args:
         side_path: Path to side-by-side CSV file
@@ -482,37 +560,79 @@ def load_side_df(side_path: Path) -> pd.DataFrame:
     Returns:
         DataFrame with parsed side-by-side data
     """
-    data = pd.read_csv(side_path, header=0, names=NAMES_SIDE, dtype=str)
+    raw = pd.read_csv(side_path, header=0, dtype=str)
+    headers = list(raw.columns)
+
+    # Find Strike column to split call/put sides
+    strike_idx = find_strike_index(headers)
+    if strike_idx == -1:
+        LOGGER.error("No Strike column found in %s", side_path.name)
+        return pd.DataFrame()
+
+    call_headers = headers[:strike_idx]
+    put_headers = headers[strike_idx + 1:]
+
+    LOGGER.info("  Side file Strike at index %d | Call cols: %s | Put cols: %s",
+                strike_idx, call_headers, put_headers)
+
+    # Build a flat DataFrame with renamed columns
+    data = pd.DataFrame()
+    data["Strike"] = raw.iloc[:, strike_idx]
+
+    # Column name variants for each field we need
+    volume_names = ["volume"]
+    oi_names = ["open int", "open interest"]
+    iv_names = ["iv"]
+
+    # Map call-side columns
+    for i, h in enumerate(call_headers):
+        key = strip_pandas_suffix(h).lower()
+        if key in volume_names:
+            data["call_volume"] = raw.iloc[:, i]
+        elif key in oi_names:
+            data["call_open_interest"] = raw.iloc[:, i]
+        elif key in iv_names:
+            data["call_iv_raw"] = raw.iloc[:, i]
+
+    # Map put-side columns (offset by strike_idx + 1)
+    for i, h in enumerate(put_headers):
+        key = strip_pandas_suffix(h).lower()
+        col_idx = strike_idx + 1 + i
+        if key in volume_names:
+            data["put_volume"] = raw.iloc[:, col_idx]
+        elif key in oi_names:
+            data["put_open_interest"] = raw.iloc[:, col_idx]
+        elif key in iv_names:
+            data["put_iv_raw"] = raw.iloc[:, col_idx]
+
+    # Validate all required columns were found
+    required = ["Strike", "call_volume", "call_open_interest", "call_iv_raw",
+                "put_volume", "put_open_interest", "put_iv_raw"]
+    missing = [col for col in required if col not in data.columns]
+    if missing:
+        LOGGER.error("Could not map columns in %s: missing %s", side_path.name, missing)
+        return pd.DataFrame()
+
+    # Parse numeric/percent values
     data["Strike"] = parse_numeric_series(data["Strike"], side_path, "Strike", drop_invalid=True)
     data["call_volume"] = parse_numeric_series(data["call_volume"], side_path, "call_volume")
-    data["call_open_interest"] = parse_numeric_series(
-        data["call_open_interest"], side_path, "call_open_interest"
-    )
+    data["call_open_interest"] = parse_numeric_series(data["call_open_interest"], side_path, "call_open_interest")
     data["put_volume"] = parse_numeric_series(data["put_volume"], side_path, "put_volume")
-    data["put_open_interest"] = parse_numeric_series(
-        data["put_open_interest"], side_path, "put_open_interest"
-    )
+    data["put_open_interest"] = parse_numeric_series(data["put_open_interest"], side_path, "put_open_interest")
     data["call_iv_raw"] = parse_percent_series(data["call_iv_raw"], side_path, "call_iv_raw")
     data["put_iv_raw"] = parse_percent_series(data["put_iv_raw"], side_path, "put_iv_raw")
     data = data.dropna(subset=["Strike"])
-    return data[
-        [
-            "Strike",
-            "call_volume",
-            "call_open_interest",
-            "call_iv_raw",
-            "put_volume",
-            "put_open_interest",
-            "put_iv_raw",
-        ]
-    ]
+
+    return data[["Strike", "call_volume", "call_open_interest", "call_iv_raw",
+                 "put_volume", "put_open_interest", "put_iv_raw"]]
 
 
 def load_greeks_df(greeks_path: Path) -> pd.DataFrame:
     """Load and parse volatility Greeks CSV file.
 
-    Reads call and put Greeks data including delta, gamma, theta,
-    and implied volatility. Cleans numeric values and percentages.
+    Reads the file using actual headers, locates the Strike column to split
+    call-side (left) and put-side (right), then maps columns by name.
+    Handles variations in column names and counts across data sources.
 
     Args:
         greeks_path: Path to Greeks CSV file
@@ -520,30 +640,91 @@ def load_greeks_df(greeks_path: Path) -> pd.DataFrame:
     Returns:
         DataFrame with parsed Greeks data
     """
-    data = pd.read_csv(greeks_path, header=0, names=NAMES_GREEKS, dtype=str)
+    raw = pd.read_csv(greeks_path, header=0, dtype=str)
+    headers = list(raw.columns)
+
+    # Find Strike column to split call/put sides
+    strike_idx = find_strike_index(headers)
+    if strike_idx == -1:
+        LOGGER.error("No Strike column found in %s", greeks_path.name)
+        return pd.DataFrame()
+
+    call_headers = headers[:strike_idx]
+    put_headers = headers[strike_idx + 1:]
+
+    LOGGER.info("  Greeks file Strike at index %d | Call cols: %s | Put cols: %s",
+                strike_idx, call_headers, put_headers)
+
+    # Build a flat DataFrame with renamed columns
+    data = pd.DataFrame()
+    data["Strike"] = raw.iloc[:, strike_idx]
+
+    # Column name variants for each Greeks field
+    delta_names = ["delta"]
+    gamma_names = ["gamma"]
+    theta_names = ["theta"]
+    vega_names = ["vega"]
+    iv_names = ["iv"]
+
+    # Map call-side columns (before Strike)
+    for i, h in enumerate(call_headers):
+        key = strip_pandas_suffix(h).lower()
+        if key in delta_names:
+            data["call_delta"] = raw.iloc[:, i]
+        elif key in gamma_names:
+            data["call_gamma"] = raw.iloc[:, i]
+        elif key in theta_names:
+            data["call_theta"] = raw.iloc[:, i]
+        elif key in vega_names:
+            data["call_vega"] = raw.iloc[:, i]
+        elif key in iv_names:
+            data["call_iv"] = raw.iloc[:, i]
+
+    # Map put-side columns (after Strike)
+    for i, h in enumerate(put_headers):
+        key = strip_pandas_suffix(h).lower()
+        col_idx = strike_idx + 1 + i
+        if key in delta_names:
+            data["puts_delta"] = raw.iloc[:, col_idx]
+        elif key in gamma_names:
+            data["put_gamma"] = raw.iloc[:, col_idx]
+        elif key in theta_names:
+            data["put_theta"] = raw.iloc[:, col_idx]
+        elif key in vega_names:
+            data["put_vega"] = raw.iloc[:, col_idx]
+        elif key in iv_names:
+            data["put_iv"] = raw.iloc[:, col_idx]
+
+    # Validate required columns were found
+    required = ["Strike", "call_delta", "call_gamma", "call_theta",
+                "puts_delta", "put_gamma", "put_theta"]
+    missing = [col for col in required if col not in data.columns]
+    if missing:
+        LOGGER.error("Could not map columns in %s: missing %s", greeks_path.name, missing)
+        return pd.DataFrame()
+
+    # Vega and IV are optional — fill with 0 if not found
+    for optional_col in ["call_vega", "put_vega", "call_iv", "put_iv"]:
+        if optional_col not in data.columns:
+            data[optional_col] = "0"
+            LOGGER.warning("  %s: Column '%s' not found, defaulting to 0", greeks_path.name, optional_col)
+
+    # Parse numeric/percent values
     data["Strike"] = parse_numeric_series(data["Strike"], greeks_path, "Strike", drop_invalid=True)
     data["call_iv"] = parse_percent_series(data["call_iv"], greeks_path, "call_iv")
     data["put_iv"] = parse_percent_series(data["put_iv"], greeks_path, "put_iv")
     data["call_delta"] = parse_numeric_series(data["call_delta"], greeks_path, "call_delta")
     data["call_gamma"] = parse_numeric_series(data["call_gamma"], greeks_path, "call_gamma")
     data["call_theta"] = parse_numeric_series(data["call_theta"], greeks_path, "call_theta")
+    data["call_vega"] = parse_numeric_series(data["call_vega"], greeks_path, "call_vega")
     data["puts_delta"] = parse_numeric_series(data["puts_delta"], greeks_path, "puts_delta")
     data["put_gamma"] = parse_numeric_series(data["put_gamma"], greeks_path, "put_gamma")
     data["put_theta"] = parse_numeric_series(data["put_theta"], greeks_path, "put_theta")
+    data["put_vega"] = parse_numeric_series(data["put_vega"], greeks_path, "put_vega")
     data = data.dropna(subset=["Strike"])
-    return data[
-        [
-            "Strike",
-            "call_delta",
-            "call_gamma",
-            "call_theta",
-            "puts_delta",
-            "put_gamma",
-            "put_theta",
-            "call_iv",
-            "put_iv",
-        ]
-    ]
+
+    return data[["Strike", "call_delta", "call_gamma", "call_theta", "call_vega",
+                 "puts_delta", "put_gamma", "put_theta", "put_vega", "call_iv", "put_iv"]]
 
 
 def merge_pair(pair: FilePair) -> ProcessingResult | None:
@@ -705,7 +886,9 @@ def process_pairs() -> None:
 
     results: list[ProcessingResult] = []
     for pair in pairs:
-        if not validate_pair(pair):
+        valid, err_msg = validate_pair(pair)
+        if not valid:
+            LOGGER.warning("Skipping invalid pair: %s", err_msg)
             continue
         result = merge_pair(pair)
         if result is None:

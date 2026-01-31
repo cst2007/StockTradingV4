@@ -197,11 +197,38 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .nav-bar {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .nav-bar a {
+            display: inline-block;
+            padding: 12px 30px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: all 0.3s;
+        }
+
+        .nav-bar a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+            background: #f8f9fa;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Stock Options Pair Processing</h1>
+
+        <div class="nav-bar">
+            <a href="/results">📊 View Decision Tables & Analysis →</a>
+        </div>
 
         {% if pairs %}
         <div class="pairs-grid">
