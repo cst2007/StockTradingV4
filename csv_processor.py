@@ -45,7 +45,7 @@ EXPECTED_SIDE_HEADERS = [
     "Last Trade",
     "Strike",
     "Type",
-    "Last",
+    "Latest",
     "Bid",
     "Ask",
     "Change",
@@ -56,7 +56,7 @@ EXPECTED_SIDE_HEADERS = [
 ]
 
 EXPECTED_GREEKS_HEADERS = [
-    "Last",
+    "Latest",
     "Theor.",
     "IV",
     "Delta",
@@ -65,7 +65,7 @@ EXPECTED_GREEKS_HEADERS = [
     "Vega",
     "Last Trade",
     "Strike",
-    "Last",
+    "Latest",
     "Theor.",
     "IV",
     "Delta",
