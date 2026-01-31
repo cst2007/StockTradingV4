@@ -97,8 +97,9 @@ def process_pair():
             return jsonify({"success": False, "error": "Pair not found"}), 404
 
         # Validate the pair
-        if not validate_pair(target_pair):
-            return jsonify({"success": False, "error": "Invalid file pair"}), 400
+        valid, validation_error = validate_pair(target_pair)
+        if not valid:
+            return jsonify({"success": False, "error": f"Invalid file pair: {validation_error}"}), 400
 
         # Merge the pair
         result = merge_pair(target_pair)
