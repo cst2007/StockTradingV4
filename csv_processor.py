@@ -236,7 +236,7 @@ def read_header(file_path: Path) -> list[str]:
     Returns:
         List of header column names
     """
-    with file_path.open(newline="", encoding="utf-8") as handle:
+    with file_path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.reader(handle)
         return next(reader, [])
 
@@ -258,7 +258,7 @@ def validate_headers(
     expected_headers: list[str],
     expected_columns: int,
     strike_index: int,
-) -> bool:
+) -> tuple[bool, str]:
     """Validate CSV file has expected structure and headers.
 
     Checks that the file contains the essential columns needed for processing.
@@ -272,24 +272,31 @@ def validate_headers(
         strike_index: Index where 'Strike' column should be located
 
     Returns:
-        True if file is valid, False otherwise
+        Tuple of (is_valid, error_message). error_message is empty string if valid.
     """
     try:
         headers = read_header(file_path)
     except Exception as exc:
-        LOGGER.error("Failed to read %s: %s", file_path.name, exc)
-        return False
+        msg = f"{file_path.name}: failed to read ({exc})"
+        LOGGER.error(msg)
+        return False, msg
 
     # Log actual headers for diagnostics
     LOGGER.info("  Headers in %s (%d cols): %s", file_path.name, len(headers), headers)
+
+    if not headers:
+        msg = f"{file_path.name}: empty or missing header row"
+        LOGGER.error(msg)
+        return False, msg
 
     # Find Strike column anywhere in headers (case-insensitive)
     strike_positions = [
         i for i, h in enumerate(headers) if h.strip().lower() == "strike"
     ]
     if not strike_positions:
-        LOGGER.error("%s missing Strike column", file_path.name)
-        return False
+        msg = f"{file_path.name}: missing Strike column. Found headers: {headers}"
+        LOGGER.error(msg)
+        return False, msg
 
     # Determine if this is a side-by-side or greeks file based on filename
     is_side = "side-by-side" in file_path.name.lower()
@@ -301,12 +308,17 @@ def validate_headers(
         has_volume = "volume" in normalized
         has_oi = "open int" in normalized or "open interest" in normalized
         has_iv = "iv" in normalized
-        if not (has_volume and has_oi and has_iv):
-            LOGGER.error(
-                "%s missing required side-by-side columns (need Volume, Open Int, IV). Found: %s",
-                file_path.name, headers
-            )
-            return False
+        missing = []
+        if not has_volume:
+            missing.append("Volume")
+        if not has_oi:
+            missing.append("Open Int/Interest")
+        if not has_iv:
+            missing.append("IV")
+        if missing:
+            msg = f"{file_path.name}: missing columns {missing}. Found: {headers}"
+            LOGGER.error(msg)
+            return False, msg
 
     elif is_greeks:
         # Greeks needs: Strike, Delta, Gamma, Theta
@@ -314,14 +326,19 @@ def validate_headers(
         has_delta = "delta" in normalized
         has_gamma = "gamma" in normalized
         has_theta = "theta" in normalized
-        if not (has_delta and has_gamma and has_theta):
-            LOGGER.error(
-                "%s missing required Greeks columns (need Delta, Gamma, Theta). Found: %s",
-                file_path.name, headers
-            )
-            return False
+        missing = []
+        if not has_delta:
+            missing.append("Delta")
+        if not has_gamma:
+            missing.append("Gamma")
+        if not has_theta:
+            missing.append("Theta")
+        if missing:
+            msg = f"{file_path.name}: missing columns {missing}. Found: {headers}"
+            LOGGER.error(msg)
+            return False, msg
 
-    return True
+    return True, ""
 
 
 def parse_numeric_series(
@@ -484,18 +501,19 @@ def choose_newest(current_path: Path, new_path: Path, key: FileSetKey) -> Path:
     return current_path
 
 
-def validate_pair(pair: FilePair) -> bool:
+def validate_pair(pair: FilePair) -> tuple[bool, str]:
     """Validate both files in a pair have correct structure.
 
     Args:
         pair: File pair to validate
 
     Returns:
-        True if both files are valid, False otherwise
+        Tuple of (is_valid, error_message). error_message is empty string if valid.
     """
-    side_ok = validate_headers(pair.side_path, EXPECTED_SIDE_HEADERS, 19, 9)
-    greeks_ok = validate_headers(pair.greeks_path, EXPECTED_GREEKS_HEADERS, 17, 8)
-    return side_ok and greeks_ok
+    side_ok, side_err = validate_headers(pair.side_path, EXPECTED_SIDE_HEADERS, 19, 9)
+    greeks_ok, greeks_err = validate_headers(pair.greeks_path, EXPECTED_GREEKS_HEADERS, 17, 8)
+    errors = [e for e in [side_err, greeks_err] if e]
+    return side_ok and greeks_ok, "; ".join(errors)
 
 
 def find_strike_index(headers: list[str]) -> int:
@@ -868,7 +886,9 @@ def process_pairs() -> None:
 
     results: list[ProcessingResult] = []
     for pair in pairs:
-        if not validate_pair(pair):
+        valid, err_msg = validate_pair(pair)
+        if not valid:
+            LOGGER.warning("Skipping invalid pair: %s", err_msg)
             continue
         result = merge_pair(pair)
         if result is None:
