@@ -606,6 +606,172 @@ def add_decision_tables(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def add_equity_interpretations(df: pd.DataFrame) -> pd.DataFrame:
+    """Add equity-focused support/resistance interpretations.
+
+    Provides directional trading context based on z-score combinations:
+    - DEX_z → Support/Resistance strength
+    - GEX_z → Stability vs Breakout regime
+    - VOL_SHOCK_z → Move speed and failure mode
+
+    Args:
+        df: DataFrame with z-score columns
+
+    Returns:
+        DataFrame with equity interpretation columns
+    """
+    result = df.copy()
+
+    # DEX_z Equity Interpretation
+    def dex_equity_interp(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "Strong downside acceleration — support likely to fail hard"
+        elif z <= -1.5:
+            return "Downside pressure dominant — weak / temporary support"
+        elif z <= -0.75:
+            return "Mild downside bias — support needs confirmation"
+        elif z <= 0.75:
+            return "Neutral pressure — normal technical support/resistance"
+        elif z <= 1.5:
+            return "Upside capped / absorption — strong support, resistance holds"
+        else:
+            return "Forced selling into rallies — strong resistance / pin risk"
+
+    def dex_support_resistance(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "❌ Support likely to fail hard"
+        elif z <= -1.5:
+            return "⚠️ Weak / temporary support"
+        elif z <= -0.75:
+            return "⚠️ Support needs confirmation"
+        elif z <= 0.75:
+            return "✅ Normal technical support/resistance"
+        elif z <= 1.5:
+            return "✅ Strong support, resistance holds"
+        else:
+            return "🧲 Strong resistance / pin risk"
+
+    # GEX_z Equity Interpretation
+    def gex_equity_interp(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "Extreme instability — levels break violently"
+        elif z <= -1.5:
+            return "High trend risk — support/resistance unreliable"
+        elif z <= -0.75:
+            return "Trend-friendly — breakouts more likely"
+        elif z <= 0.75:
+            return "Mixed — normal TA applies"
+        elif z <= 1.5:
+            return "Mean reversion — levels act as magnets"
+        else:
+            return "Pinning / compression — very strong S/R, chop"
+
+    def gex_level_behavior(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "❌ Levels break violently"
+        elif z <= -1.5:
+            return "⚠️ Support/resistance unreliable"
+        elif z <= -0.75:
+            return "⚠️ Breakouts more likely"
+        elif z <= 0.75:
+            return "Normal TA applies"
+        elif z <= 1.5:
+            return "🧲 Levels act as magnets"
+        else:
+            return "🧲🧲 Very strong S/R, chop"
+
+    # VOL_SHOCK_z Equity Interpretation
+    def vol_shock_equity_interp(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -2.0:
+            return "IV crush regime — slow drift, fake breaks"
+        elif z <= -1.5:
+            return "Vol contraction — breaks lack follow-through"
+        elif z <= -0.75:
+            return "Mild compression — controlled moves"
+        elif z <= 0.75:
+            return "Neutral — clean technical reactions"
+        elif z <= 1.5:
+            return "Rising vol sensitivity — faster moves, whipsaws"
+        else:
+            return "IV shock risk — levels can fail explosively"
+
+    def vol_shock_expectation(z):
+        if pd.isna(z):
+            return "N/A"
+        elif z <= -1.5:
+            return "Slow moves, levels break cleanly"
+        elif z <= -0.75:
+            return "Breakouts often stall"
+        elif z <= 0.75:
+            return "Clean technical reactions"
+        elif z <= 1.5:
+            return "Whipsaws, fast moves"
+        else:
+            return "❌ Explosive failure, gaps, slippage"
+
+    # Apply equity interpretation functions
+    if 'DEX_z' in result.columns:
+        result['DEX_Equity_Interp'] = result['DEX_z'].apply(dex_equity_interp)
+        result['DEX_Support_Resistance'] = result['DEX_z'].apply(dex_support_resistance)
+
+    if 'GEX_z' in result.columns:
+        result['GEX_Equity_Interp'] = result['GEX_z'].apply(gex_equity_interp)
+        result['GEX_Level_Behavior'] = result['GEX_z'].apply(gex_level_behavior)
+
+    if 'VOL_SHOCK_z' in result.columns:
+        result['VOL_SHOCK_Equity_Interp'] = result['VOL_SHOCK_z'].apply(vol_shock_equity_interp)
+        result['VOL_SHOCK_Expectation'] = result['VOL_SHOCK_z'].apply(vol_shock_expectation)
+
+    # Combined Equity Signals
+    def equity_combined_signal(row):
+        """Determine combined equity signal based on z-score combinations."""
+        dex = row.get('DEX_z')
+        gex = row.get('GEX_z')
+        vol = row.get('VOL_SHOCK_z')
+
+        if pd.isna(dex) or pd.isna(gex) or pd.isna(vol):
+            return "N/A"
+
+        # 🟢 Strong Support (Buyable Dip)
+        if dex >= -0.75 and gex >= 0.75 and vol <= 0.75:
+            return "🟢 Strong Support (Buyable Dip)"
+
+        # 🔴 Support Likely to Fail
+        if dex <= -1.5 or gex <= -1.5 or vol >= 1.5:
+            return "🔴 Support Likely to Fail"
+
+        # 🧲 Strong Resistance (Fade Zone)
+        if dex >= 0.75 and gex >= 0.75 and vol <= 0:
+            return "🧲 Strong Resistance (Fade Zone)"
+
+        # 🚀 Breakout / Trend Zone
+        if gex <= -0.75 and vol >= 0:
+            # Check DEX alignment (absolute value > 0.5 means directional)
+            if abs(dex) > 0.5:
+                return "🚀 Breakout / Trend Zone"
+
+        # 🟡 Weak / Conditional Support
+        if -0.75 <= dex < 0 and -0.75 < gex < 0.75 and vol > 0:
+            return "🟡 Weak / Conditional Support"
+
+        # Default: Neutral zone
+        return "⚪ Neutral Zone"
+
+    result['Equity_Combined_Signal'] = result.apply(equity_combined_signal, axis=1)
+
+    return result
+
+
 def add_rankings(df: pd.DataFrame) -> pd.DataFrame:
     """Add ranking columns based on absolute values of key metrics.
 
@@ -718,6 +884,9 @@ def process_unified_files() -> list[Path]:
 
             # Add decision tables based on z-score bands
             result_df = add_decision_tables(result_df)
+
+            # Add equity interpretations for support/resistance analysis
+            result_df = add_equity_interpretations(result_df)
 
             # Add rankings
             result_df = add_rankings(result_df)
