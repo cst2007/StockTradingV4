@@ -605,6 +605,97 @@ Step 3: Upgrade Count  (each checked independently)
 
 ---
 
+## 8A. Equity Interpretations (Support/Resistance Analysis)
+
+In addition to the CSP/CC options strategy recommendations, the system provides equity-focused interpretations for directional traders. These interpret the same z-scores through the lens of support/resistance behavior, breakout probability, and move characteristics.
+
+### Per-Metric Equity Interpretations
+
+Each metric gets two equity columns: an interpretation and a specific behavior/expectation.
+
+#### DEX_z — Support/Resistance Strength
+
+| Column | Description |
+|---|---|
+| `DEX_Equity_Interp` | Explains what the DEX_z level means for directional pressure |
+| `DEX_Support_Resistance` | Assessment of support/resistance reliability |
+
+**Interpretation table:**
+
+| DEX_z Band | Equity Interpretation | Support/Resistance Behavior |
+|---|---|---|
+| ≤ −2.0 | Strong downside acceleration | ❌ Support likely to fail hard |
+| −2.0 to −1.5 | Downside pressure dominant | ⚠️ Weak / temporary support |
+| −1.5 to −0.75 | Mild downside bias | ⚠️ Support needs confirmation |
+| −0.75 to +0.75 | Neutral pressure | ✅ Normal technical support/resistance |
+| 0.75 to +1.5 | Upside capped / absorption | ✅ Strong support, resistance holds |
+| ≥ +1.5 | Forced selling into rallies | 🧲 Strong resistance / pin risk |
+
+**Key takeaway:** Support is only trusted when DEX_z ≥ −0.75. Resistance is strongest when DEX_z ≥ +0.75.
+
+#### GEX_z — Stability vs Breakout
+
+| Column | Description |
+|---|---|
+| `GEX_Equity_Interp` | Stability regime assessment |
+| `GEX_Level_Behavior` | How technical levels will behave |
+
+**Interpretation table:**
+
+| GEX_z Band | Equity Interpretation | Level Behavior |
+|---|---|---|
+| ≤ −2.0 | Extreme instability | ❌ Levels break violently |
+| −2.0 to −1.5 | High trend risk | ⚠️ Support/resistance unreliable |
+| −1.5 to −0.75 | Trend-friendly | ⚠️ Breakouts more likely |
+| −0.75 to +0.75 | Mixed | Normal TA applies |
+| 0.75 to +1.5 | Mean reversion | 🧲 Levels act as magnets |
+| ≥ +1.5 | Pinning / compression | 🧲🧲 Very strong S/R, chop |
+
+**Key takeaway:** High positive GEX_z = range trading, fade extremes. Negative GEX_z = breakout or trend continuation mode.
+
+#### VOL_SHOCK_z — Move Speed & Failure Mode
+
+| Column | Description |
+|---|---|
+| `VOL_SHOCK_Equity_Interp` | Volatility regime and its implications |
+| `VOL_SHOCK_Expectation` | What to expect at this strike |
+
+**Interpretation table:**
+
+| VOL_SHOCK_z Band | Equity Interpretation | What to Expect |
+|---|---|---|
+| ≤ −2.0 | IV crush regime | Slow drift, fake breaks |
+| −2.0 to −1.5 | Vol contraction | Breaks lack follow-through |
+| −1.5 to −0.75 | Mild compression | Controlled moves |
+| −0.75 to +0.75 | Neutral | Clean technical reactions |
+| 0.75 to +1.5 | Rising vol sensitivity | Whipsaws, fast moves |
+| ≥ +1.5 | IV shock risk | ❌ Explosive failure, gaps, slippage |
+
+**Key takeaway:** High VOL_SHOCK_z = don't trust tight stops. Neutral/low VOL_SHOCK_z = clean technical reactions.
+
+### Combined Equity Signal
+
+The `Equity_Combined_Signal` column synthesizes all three z-scores into a single directional verdict. It tells you whether to buy dips, fade rallies, trade momentum, or stay cautious.
+
+| Signal | Conditions | Meaning |
+|---|---|---|
+| 🟢 Strong Support (Buyable Dip) | DEX_z ≥ −0.75<br>GEX_z ≥ +0.75<br>VOL_SHOCK_z ≤ +0.75 | Expect absorption and mean reversion. Dips are buyable. Strong support level. |
+| 🔴 Support Likely to Fail | DEX_z ≤ −1.5<br>**OR** GEX_z ≤ −1.5<br>**OR** VOL_SHOCK_z ≥ +1.5 | Expect breakdown or acceleration. Don't trust support here. Exit longs on break. |
+| 🧲 Strong Resistance (Fade Zone) | DEX_z ≥ +0.75<br>GEX_z ≥ +0.75<br>VOL_SHOCK_z ≤ 0 | Rallies stall, pins form. Fade strength. Strong resistance cap. |
+| 🚀 Breakout / Trend Zone | GEX_z ≤ −0.75<br>VOL_SHOCK_z ≥ 0<br>\|DEX_z\| > 0.5 | Don't fade — trade momentum. Levels less reliable, trend continuation likely. |
+| 🟡 Weak / Conditional Support | DEX_z slightly negative<br>GEX_z neutral<br>VOL_SHOCK_z rising | Needs confirmation from volume, time, or structure. Not reliable standalone. |
+| ⚪ Neutral Zone | None of the above | No strong directional edge. Wait for better setup. |
+
+**Usage tips:**
+- **🟢 Strong Support** — Enter longs on dips to this strike. Set stops below.
+- **🔴 Support Fail** — Don't catch the falling knife. Wait for stabilization.
+- **🧲 Strong Resistance** — Sell into rallies. Fade rips to this strike.
+- **🚀 Breakout Zone** — Ride the momentum. Trail stops, don't fade.
+- **🟡 Weak Support** — Only trade if you have additional confluence (higher timeframe, volume spike, candlestick pattern).
+- **⚪ Neutral** — No edge. Skip this strike for directional trades.
+
+---
+
 ## 9. Output Column Reference
 
 ### options_unified_*.csv (21 columns)
@@ -635,7 +726,7 @@ The merged raw data before any calculations are applied.
 | Put_IV | Put implied volatility (decimal) |
 | Put_Vanna | Put vanna (reserved) |
 
-### base_calculations_*.csv (80+ columns)
+### base_calculations_*.csv (90+ columns)
 
 Full pipeline output. Includes all columns from the unified file plus:
 
@@ -651,6 +742,7 @@ Full pipeline output. Includes all columns from the unified file plus:
 | Per-metric actions | DEX_CSP_Action, DEX_CC_Action, GEX_CSP_Action, GEX_CC_Action, GEX_SKEW_CSP_Action, GEX_SKEW_CC_Action, GEX_SKEW_Equity_Meaning, VOL_SHOCK_CSP_Action, VOL_SHOCK_CC_Action |
 | Hard blocks | CSP_Hard_Blocks, CC_Hard_Blocks |
 | Final signals | CSP_Combined_Signal, CC_Combined_Signal |
+| Equity interpretations | DEX_Equity_Interp, DEX_Support_Resistance, GEX_Equity_Interp, GEX_Level_Behavior, VOL_SHOCK_Equity_Interp, VOL_SHOCK_Expectation, Equity_Combined_Signal |
 | Rankings | DEX_Rank, GEX_Rank, GEX_SKEW_Rank, VOL_SHOCK_Rank, THETA_EXPO_Rank, IVxOI_Rank, OI_Imbalance_Rank |
 | Window totals | DEX_total, CALL_DEX_total, PUT_DEX_total, DEX_$_total, CALL_GEX_total, PUT_GEX_total, NET_GEX_total, GEX_SKEW_total, VEGA_EXPO_total, CALL_VEGA_EXPO_total, PUT_VEGA_EXPO_total, THETA_EXPO_total, CALL_THETA_EXPO_total, PUT_THETA_EXPO_total, IVxOI_total, Total_Call_OI, Total_Put_OI, Total_OI |
 
