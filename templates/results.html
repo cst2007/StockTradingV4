@@ -337,6 +337,38 @@
             display: inline-block;
         }
 
+        .equity-signal {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: inline-block;
+            font-size: 13px;
+        }
+
+        .equity-support {
+            background: #d1fae5;
+            color: #065f46;
+            border: 2px solid #10b981;
+        }
+
+        .equity-resistance {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #ef4444;
+        }
+
+        .equity-breakout {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 2px solid #3b82f6;
+        }
+
+        .equity-neutral {
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 2px solid #9ca3af;
+        }
+
         .loading {
             text-align: center;
             padding: 60px;
@@ -479,6 +511,7 @@
         <div class="content">
             <div class="tabs">
                 <div class="tab active" data-tab="overview">Overview</div>
+                <div class="tab" data-tab="equity">Equity Interpretations</div>
                 <div class="tab" data-tab="csp">CSP Analysis</div>
                 <div class="tab" data-tab="cc">CC Analysis</div>
                 <div class="tab" data-tab="detailed">Detailed Metrics</div>
@@ -502,10 +535,33 @@
                                 <th>VOL_z</th>
                                 <th>CSP Signal</th>
                                 <th>CC Signal</th>
-                                <th>Equity Meaning</th>
+                                <th>Combined Equity Signal</th>
                             </tr>
                         </thead>
                         <tbody id="overviewTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="equityTab" class="tab-content">
+                <div class="table-container">
+                    <table id="equityTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Strike</th>
+                                <th>DEX_z</th>
+                                <th>DEX Equity Interpretation</th>
+                                <th>Support/Resistance</th>
+                                <th>GEX_z</th>
+                                <th>GEX Equity Interpretation</th>
+                                <th>Level Behavior</th>
+                                <th>VOL_z</th>
+                                <th>VOL Equity Interpretation</th>
+                                <th>Move Expectation</th>
+                                <th>Combined Signal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="equityTableBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -692,6 +748,7 @@
             const filteredData = applyFilter(result.data);
 
             renderOverviewTable(filteredData);
+            renderEquityTable(filteredData);
             renderCSPTable(filteredData);
             renderCCTable(filteredData);
             renderDetailedTable(filteredData);
@@ -736,12 +793,44 @@
                     <td>${renderZScore(row.VOL_SHOCK_z)}</td>
                     <td>${renderSignal(row.CSP_Combined_Signal)}</td>
                     <td>${renderSignal(row.CC_Combined_Signal)}</td>
-                    <td style="font-size: 11px;">${row.GEX_SKEW_Equity_Meaning || '-'}</td>
+                    <td style="font-size: 12px; font-weight: 600;">${row.Equity_Combined_Signal || '-'}</td>
                 `;
                 tbody.appendChild(tr);
             });
 
             document.getElementById('overviewTable').style.display = data.length > 0 ? 'table' : 'none';
+        }
+
+        function renderEquityTable(data) {
+            const tbody = document.getElementById('equityTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+
+                // Highlight rows with strong support or breakout signals
+                const signal = row.Equity_Combined_Signal || '';
+                if (signal.includes('🟢') || signal.includes('🚀')) {
+                    tr.classList.add('highlight-row');
+                }
+
+                tr.innerHTML = `
+                    <td class="strike-cell">$${row.Strike}</td>
+                    <td>${renderZScore(row.DEX_z)}</td>
+                    <td style="font-size: 11px;">${row.DEX_Equity_Interp || '-'}</td>
+                    <td style="font-size: 11px; font-weight: 600;">${row.DEX_Support_Resistance || '-'}</td>
+                    <td>${renderZScore(row.GEX_z)}</td>
+                    <td style="font-size: 11px;">${row.GEX_Equity_Interp || '-'}</td>
+                    <td style="font-size: 11px; font-weight: 600;">${row.GEX_Level_Behavior || '-'}</td>
+                    <td>${renderZScore(row.VOL_SHOCK_z)}</td>
+                    <td style="font-size: 11px;">${row.VOL_SHOCK_Equity_Interp || '-'}</td>
+                    <td style="font-size: 11px; font-weight: 600;">${row.VOL_SHOCK_Expectation || '-'}</td>
+                    <td style="font-size: 13px; font-weight: 700;">${signal}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('equityTable').style.display = data.length > 0 ? 'table' : 'none';
         }
 
         function renderCSPTable(data) {
@@ -875,6 +964,7 @@
 
         function hideAllTables() {
             document.getElementById('overviewTable').style.display = 'none';
+            document.getElementById('equityTable').style.display = 'none';
             document.getElementById('cspTable').style.display = 'none';
             document.getElementById('ccTable').style.display = 'none';
             document.getElementById('detailedTable').style.display = 'none';
