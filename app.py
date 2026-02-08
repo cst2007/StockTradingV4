@@ -28,6 +28,7 @@ from generate_base_calculations import (
     calculate_exposures,
     calculate_z_scores,
     add_decision_tables,
+    add_equity_interpretations,
     add_rankings,
     calculate_window_totals,
     OUTPUT_DIR as BASE_CALC_DIR,
@@ -120,6 +121,9 @@ def process_pair():
 
         # Add decision tables
         result.dataframe = add_decision_tables(result.dataframe)
+
+        # Add equity interpretations
+        result.dataframe = add_equity_interpretations(result.dataframe)
 
         # Add rankings
         result.dataframe = add_rankings(result.dataframe)

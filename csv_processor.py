@@ -746,6 +746,9 @@ def merge_pair(pair: FilePair) -> ProcessingResult | None:
         LOGGER.error("Failed to read %s/%s: %s", pair.side_path.name, pair.greeks_path.name, exc)
         return None
 
+    LOGGER.info("Column filtering: Side file=%d cols, Greeks file=%d cols",
+                len(side_df.columns), len(greeks_df.columns))
+
     merged = pd.merge(greeks_df, side_df, on="Strike", how="inner")
     if merged.empty:
         LOGGER.warning(
@@ -777,7 +780,12 @@ def merge_pair(pair: FilePair) -> ProcessingResult | None:
     )
 
     merged = merged.dropna(subset=["Strike"])
+
+    # Filter to only the columns we use for analysis
     merged = merged[OUTPUT_COLUMNS]
+    LOGGER.info("  → Final filtered output: %d columns (from %d original CSV columns)",
+                len(merged.columns), 19 + 17)  # 19 side + 17 greeks
+
     return ProcessingResult(dataframe=merged, pair=pair)
 
 
