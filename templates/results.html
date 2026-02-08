@@ -535,7 +535,7 @@
                                 <th>VOL_z</th>
                                 <th>CSP Signal</th>
                                 <th>CC Signal</th>
-                                <th>Combined Equity Signal</th>
+                                <th>Equity Meaning</th>
                             </tr>
                         </thead>
                         <tbody id="overviewTableBody"></tbody>
@@ -580,7 +580,9 @@
                                 <th>VOL Action</th>
                                 <th>SKEW Action</th>
                                 <th>Hard Blocks</th>
-                                <th>Combined Signal</th>
+                                <th>CSP Signal</th>
+                                <th>Equity Signal</th>
+                                <th>Support/Resistance</th>
                             </tr>
                         </thead>
                         <tbody id="cspTableBody"></tbody>
@@ -602,7 +604,9 @@
                                 <th>VOL Action</th>
                                 <th>SKEW Action</th>
                                 <th>Hard Blocks</th>
-                                <th>Combined Signal</th>
+                                <th>CC Signal</th>
+                                <th>Equity Signal</th>
+                                <th>Support/Resistance</th>
                             </tr>
                         </thead>
                         <tbody id="ccTableBody"></tbody>
@@ -781,7 +785,10 @@
 
             data.forEach(row => {
                 const tr = document.createElement('tr');
-                if (row.CSP_Combined_Signal && row.CSP_Combined_Signal.includes('STRONG')) {
+                const equitySignal = row.Equity_Combined_Signal || '';
+                // Highlight for strong CSP signals or strong equity support
+                if ((row.CSP_Combined_Signal && row.CSP_Combined_Signal.includes('STRONG')) ||
+                    equitySignal.includes('🟢') || equitySignal.includes('🚀')) {
                     tr.classList.add('highlight-row');
                 }
 
@@ -793,7 +800,7 @@
                     <td>${renderZScore(row.VOL_SHOCK_z)}</td>
                     <td>${renderSignal(row.CSP_Combined_Signal)}</td>
                     <td>${renderSignal(row.CC_Combined_Signal)}</td>
-                    <td style="font-size: 12px; font-weight: 600;">${row.Equity_Combined_Signal || '-'}</td>
+                    <td style="font-size: 11px;">${row.GEX_SKEW_Equity_Meaning || '-'}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -839,7 +846,10 @@
 
             data.forEach(row => {
                 const tr = document.createElement('tr');
-                if (row.CSP_Combined_Signal && row.CSP_Combined_Signal.includes('STRONG')) {
+                // Highlight if CSP signal is strong OR equity signal is supportive
+                const equitySignal = row.Equity_Combined_Signal || '';
+                if ((row.CSP_Combined_Signal && row.CSP_Combined_Signal.includes('STRONG')) ||
+                    equitySignal.includes('🟢')) {
                     tr.classList.add('highlight-row');
                 }
 
@@ -854,6 +864,8 @@
                     <td>${renderAction(row.GEX_SKEW_CSP_Action)}</td>
                     <td style="font-size: 11px;">${row.CSP_Hard_Blocks || '-'}</td>
                     <td>${renderSignal(row.CSP_Combined_Signal)}</td>
+                    <td style="font-size: 12px; font-weight: 600;">${equitySignal}</td>
+                    <td style="font-size: 11px; font-weight: 600;">${row.DEX_Support_Resistance || '-'}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -867,7 +879,10 @@
 
             data.forEach(row => {
                 const tr = document.createElement('tr');
-                if (row.CC_Combined_Signal && row.CC_Combined_Signal.includes('STRONG')) {
+                // Highlight if CC signal is strong OR equity signal shows resistance
+                const equitySignal = row.Equity_Combined_Signal || '';
+                if ((row.CC_Combined_Signal && row.CC_Combined_Signal.includes('STRONG')) ||
+                    equitySignal.includes('🧲')) {
                     tr.classList.add('highlight-row');
                 }
 
@@ -882,6 +897,8 @@
                     <td>${renderAction(row.GEX_SKEW_CC_Action)}</td>
                     <td style="font-size: 11px;">${row.CC_Hard_Blocks || '-'}</td>
                     <td>${renderSignal(row.CC_Combined_Signal)}</td>
+                    <td style="font-size: 12px; font-weight: 600;">${equitySignal}</td>
+                    <td style="font-size: 11px; font-weight: 600;">${row.DEX_Support_Resistance || '-'}</td>
                 `;
                 tbody.appendChild(tr);
             });
