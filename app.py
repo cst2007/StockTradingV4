@@ -218,6 +218,11 @@ def get_calculation_data(filename):
             'CSP_Combined_Signal', 'CC_Combined_Signal',
             'call_open_interest', 'puts_open_interest', 'OI_Imbalance',
             'Call_IV', 'Put_IV',
+            # Equity interpretation columns
+            'DEX_Equity_Interp', 'DEX_Support_Resistance',
+            'GEX_Equity_Interp', 'GEX_Level_Behavior',
+            'VOL_SHOCK_Equity_Interp', 'VOL_SHOCK_Expectation',
+            'Equity_Combined_Signal',
         ]
 
         # Filter to only columns that exist
