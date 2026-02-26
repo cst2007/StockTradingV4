@@ -237,6 +237,9 @@ def get_calculation_data(filename):
         for col in result_df.select_dtypes(include=['float64']).columns:
             result_df[col] = result_df[col].round(3)
 
+        # Replace NaN with None for valid JSON (NaN is not valid JSON, must be null)
+        result_df = result_df.where(pd.notna(result_df), None)
+
         # Convert to dict for JSON
         data = result_df.to_dict('records')
 
