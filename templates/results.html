@@ -698,7 +698,9 @@
                 document.getElementById('summarySection').classList.remove('visible');
                 hideAllTables();
 
-                const response = await fetch(`/api/calculation/${filename}`);
+                // Encode filename to handle special characters like $ in $SPX
+                const encodedFilename = encodeURIComponent(filename);
+                const response = await fetch(`/api/calculation/${encodedFilename}`);
                 const result = await response.json();
 
                 if (!result.success) {

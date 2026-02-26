@@ -180,17 +180,21 @@ def results():
     return render_template("results.html", files=base_calc_files)
 
 
-@app.route("/api/calculation/<filename>")
+@app.route("/api/calculation/<path:filename>")
 def get_calculation_data(filename):
     """Get calculation data for a specific file."""
     try:
+        # Decode URL-encoded filename (handles $SPX and other special chars)
+        from urllib.parse import unquote
+        filename = unquote(filename)
+
         # Security: only allow base_calculations files
         if not filename.startswith("base_calculations_"):
             return jsonify({"success": False, "error": "Invalid filename"}), 400
 
         file_path = BASE_CALC_DIR / filename
         if not file_path.exists():
-            return jsonify({"success": False, "error": "File not found"}), 404
+            return jsonify({"success": False, "error": f"File not found: {filename}"}), 404
 
         # Read the CSV file
         df = pd.read_csv(file_path)
@@ -256,8 +260,9 @@ def get_calculation_data(filename):
         })
 
     except Exception as exc:
-        LOGGER.error("Error getting calculation data: %s", exc)
-        return jsonify({"success": False, "error": str(exc)}), 500
+        import traceback
+        LOGGER.error("Error getting calculation data: %s\n%s", exc, traceback.format_exc())
+        return jsonify({"success": False, "error": f"{type(exc).__name__}: {exc}"}), 500
 
 
 if __name__ == "__main__":
